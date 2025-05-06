@@ -26,6 +26,7 @@ create_parser.add_argument("--authors", type=list, nargs="+")
 create_parser.add_argument("--requires", type=list, nargs="+")
 create_parser.add_argument("--entrypoint", type=str, default="main.py")
 
+delete_parser.add_argument("name", type=str)
 
 parsed = parser.parse_args()
 
@@ -56,7 +57,6 @@ def ask(prompt: str, choices=[], default=None):
         i = input(f"{prompt} {"/".join(choices)} >")
     return i if len(i) > 0 else default
 
-
 match parsed.subparser_name:
     case "run":
         pkg = parsed.package
@@ -79,6 +79,8 @@ match parsed.subparser_name:
         print(f"\n> Running package '{pkg}' with entrypoint {entrypoint}\n")
 
         subprocess.run(f"python3 \"{os.path.join(path, "src", entrypoint)}\" {" ".join(parsed.args)}")
+
+        quit(0)
 
     case "create":
         pkg = parsed.name
@@ -179,8 +181,19 @@ match parsed.subparser_name:
 
         print(f"Successfully created new package '{pkg}'")
 
+        quit(0)
+
     case "delete":
-        ...
+        name = parsed.name
+        
+        try:
+            shutil.rmtree(get_package_dir(name))
+        except:
+            pass
+
+        os.system(f"python3 -m pip uninstall miniros-{name}")
+
+        quit(0)
 
     case "install":
         if not os.path.exists("package.xml"):
@@ -195,7 +208,7 @@ match parsed.subparser_name:
 
         # build
         shutil.rmtree("build")
-        shutil.copytree("src", f"build/{name}")
+        shutil.copytree("src", f"build/miniros-{name}")
         
         if not os.path.exists("build/__init__.py"):
             open("build/__init__.py", "w").close()
@@ -222,6 +235,10 @@ setup(
 
         os.chdir("build")
         subprocess.run(f"python3 setup.py sdist")
-        subprocess.run(f"python3 -m pip install dist/{os.listdir("dist")[0]}")
+        subprocess.run(f"python3 -m pip install dist/{os.listdir("dist")[0]} --force")
 
         print(f"Successfully installed package '{name}'")
+
+        quit(0)
+
+parser.print_help()
