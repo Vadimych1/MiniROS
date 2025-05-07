@@ -5,6 +5,7 @@ import zlib
 import threading
 from enum import Enum
 from typing import Callable
+import json
 import time
 
 AddrLike = str | tuple[str, int]
@@ -21,6 +22,11 @@ class Datatypes(Enum):
     SUBSCRIBE = 0x05
     UNSUBSCRIBE = 0x06
 
+    ANON = 0x07
+    SEND_ANON = 0x08
+
+    ROSSTAT = 0xfd
+
     REQUEST_AUTH = 0xfe
     SEND_AUTH = 0xff
 
@@ -29,6 +35,7 @@ class Errortypes(Enum):
     METHOD_NOT_FOUND = 0x01
     INVALID_CREDENTIALS = 0x02
     INVALID_SUBSCRIBE = 0x03
+    INVALID_ANON_CREDENTIALS = 0x04
 
 class Status(Enum):
     OK = 0x00
@@ -56,25 +63,42 @@ def new_sock(use_udp: bool = False) -> socket.socket:
     return sock
 
 class SockServer:
+    """
+    Socket server base class
+    Implements basic methods for interacting with clients
+    """
+
     def __init__(self, ip: str, port: int):
         self.ip = ip
         self.port = port
         self.servers: dict[str, dict] = {}
 
+        self.sending = False # fix for byte-mismatch
+
     def send(self, sock: socket.socket, data: bytearray, addr: None | AddrLike) -> None:
         data = zlib.compress(data)
         length = len(data)
         length = struct.pack(">I", length)
-        self._send(sock, length, addr)
+
+        while self.sending:
+            time.sleep(0.01)
         
+        self.sending = True
+
+        self._send(sock, length, addr)
         self._send(sock, data, addr)
         
+        self.sending = False
+
     def recv(self, sock: socket.socket, addr: None | AddrLike) -> bytearray:
-        length = self._recv(sock, 4, addr)
-        length = struct.unpack(">I", length)[0]
-        logging.info(f"WAITING FOR {length}")
-        return zlib.decompress(self._recv(sock, length, addr))        
-    
+        try:
+            length = self._recv(sock, 4, addr)
+            length = struct.unpack(">I", length)[0]
+            logging.info(f"WAITING FOR {length}")
+            return zlib.decompress(self._recv(sock, length, addr))        
+        except:
+            return bytearray([])
+            
     def _recv(self, sock, length, addr):
         ...
 
@@ -185,8 +209,48 @@ class SockServer:
                         else:
                             self.servers[node_name]["fields"][field_name]["subscribers"].append(CREDENTIALS)
 
+                    case Datatypes.ANON.value:
+                        logging.debug("GOT ANON")
+
+                        raw_node_name = data[0:3]
+                        raw_field_name = data[3:6]
+
+                        node_name = raw_node_name.decode()
+                        field_name = raw_field_name.decode()
+
+                        if node_name not in self.servers:
+                            self.send(conn, bytearray([
+                                Datatypes.ERROR.value,
+                                Errortypes.INVALID_ANON_CREDENTIALS.value
+                            ]), addr)
+                            continue
+
+                        self.send(self.servers[node_name]["socket"], bytearray([
+                            Datatypes.SEND_ANON.value,
+                            *CREDENTIALS.encode(),
+                            *raw_field_name,
+                            *data[6:], # additional info
+                        ]), addr)
+
+                    case Datatypes.ROSSTAT.value:
+                        logging.debug("GOT ROSSTAT")
+
+                        tosend = {}
+                        for x in self.servers.keys():
+                            v = self.servers[x].copy()
+
+                            for fld in v["fields"].keys():
+                                del v["fields"][fld]["data"]
+
+                            del v["socket"]
+                            tosend[x] = v
+
+                        self.send(conn, bytearray([
+                            Datatypes.ROSSTAT.value,
+                            *json.dumps(tosend).encode()
+                        ]), addr)
+
                     case _:
-                        print(datatype, data)
                         self.send(conn, bytearray([Datatypes.ERROR.value, Errortypes.METHOD_NOT_FOUND.value]), addr)
 
         except Exception as e:
@@ -205,18 +269,34 @@ class SockClient:
 
         self.received = {}
         self.handlers = {}
+        self.anon_handlers = {}
+
+        self.sending = False # fix for byte-mismatch
+
+        self.on_rosstat = lambda *val: ...
 
     def send(self, data: bytearray) -> None:
         data = zlib.compress(data)
         length = len(data)
         length = struct.pack(">I", length)
+
+        while self.sending:
+            time.sleep(0.01)
+
+        self.sending = True
+
         self._send(length)
         self._send(data)
         
+        self.sending = False
+
     def recv(self) -> bytearray:
-        length = self._recv(4)
-        length = struct.unpack(">I", length)[0]
-        return zlib.decompress(self._recv(length))
+        try:
+            length = self._recv(4)
+            length = struct.unpack(">I", length)[0]
+            return zlib.decompress(self._recv(length))
+        except:
+            return bytearray([])
 
     def _recv(self, length) -> bytearray:
         ...
@@ -251,6 +331,19 @@ class SockClient:
             Datatypes.POST.value,
             *field.encode(),
             *data,
+        ]))
+
+    def anon(self, node: str, field: str, data: bytearray) -> None:
+        self.send(bytearray([
+            Datatypes.ANON.value,
+            *node.encode(),
+            *field.encode(),
+            *data
+        ]))
+
+    def rosstat(self) -> None:
+        self.send(bytearray([
+            Datatypes.ROSSTAT.value,
         ]))
 
     def mainloop(self):
@@ -304,11 +397,22 @@ class SockClient:
                         case Errortypes.INVALID_SUBSCRIBE.value:
                             logging.error("Sended invalid subscribe credentials")
 
+                case Datatypes.SEND_ANON.value:
+                    logging.debug("GOT SEND_ANON")
+
+                    raw_node_name = data[0:3]
+                    raw_field_name = data[3:6]
+
+                    node_name = raw_node_name.decode()
+                    field_name = raw_field_name.decode()
+
+                    self.anon_handlers[field_name](data[6:], node_name)
+
+                case Datatypes.ROSSTAT.value:
+                    self.on_rosstat(json.loads(data.decode()))
+
                 case _:
-                    print(datatype, data)
                     self.send(bytearray([Datatypes.ERROR.value, Errortypes.METHOD_NOT_FOUND.value]))        
-
-
 
 class TCPSockServer(SockServer):
     def __init__(self, ip: str, port: int):

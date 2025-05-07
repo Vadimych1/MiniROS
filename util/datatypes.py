@@ -2,14 +2,14 @@ from typing import Any
 import numpy as np
 import cv2 as cv
 from enum import Enum
-
-class Datatypes:
-    NONE = 0x00
+import struct
 
 class Datatype:
     """
     Base interface for encoding and decoding data
     """
+
+    CODE = 0x00
 
     @staticmethod
     def decode(data: bytearray) -> Any:
@@ -99,12 +99,162 @@ class OpenCVImage(NumpyArray):
     def encode(image: cv.Mat, datatype: OpenCVImageType) -> bytearray:
         arr = cv.imencode(".jpg", image)[1]
         return bytearray([datatype.value]) + NumpyArray.encode(arr)
+
+class String(Datatype):
+    @staticmethod
+    def encode(data: str):
+        return data.encode()
     
-if __name__ == "__main__":
-    image = cv.imread("test.jpg")
+    @staticmethod
+    def decode(data):
+        return data.decode()
+    
+class Int(Datatype):
+    @staticmethod
+    def encode(data: int):
+        return struct.pack(">i", data)
 
-    encoded = OpenCVImage.encode(image, OpenCVImageType.BGR)
-    decoded = OpenCVImage.decode(encoded)
+    @staticmethod
+    def decode(data: bytearray):
+        return struct.unpack(">i", data)[0]
 
-    cv.imshow("lol", decoded)
-    cv.waitKey(0)
+class UInt(Datatype):
+    @staticmethod
+    def encode(data: int):
+        return struct.pack(">I", data)
+
+    @staticmethod
+    def decode(data: bytearray):
+        return struct.unpack(">I", data)[0]
+
+class Float(Datatype):
+    @staticmethod
+    def encode(data: int):
+        return struct.pack(">f", data)
+
+    @staticmethod
+    def decode(data: bytearray):
+        return struct.unpack(">f", data)[0]
+
+
+class Bytes(Datatype):
+    @staticmethod
+    def encode(data):
+        return data
+    
+    @staticmethod
+    def decode(data):
+        return data
+
+class Dict(Datatype):
+    @staticmethod
+    def encode(data: dict[str, Any], encoders: dict[type, tuple[Datatype, int]] = {
+        str: (String, 0),
+        int: (Int, 1),
+        float: (Float, 2),
+        bytes: (Bytes, 3),
+        bytearray: (Bytes, 3),
+    }) -> bytearray:
+        keys = list(data.keys())
+
+        metadata = b'\x00'.join(map(str.encode, keys))
+        metadata_length = struct.pack(">I", len(metadata))
+        metadata += metadata_length
+
+        encoded = b''
+        for key in keys:
+            if type(data[key]) in encoders:
+                e, ind = encoders[type(data[key])]
+                e = e.encode(data[key])
+
+                l = struct.pack(">I", len(e))
+                encoded += l + bytearray([ind]) + e
+            else:
+                raise TypeError(f"Encoder for type '{type(data[key])}' is not found")
+
+        return encoded + metadata
+    
+    @staticmethod
+    def decode(data: bytearray, decoders: dict[int, Datatype] = {
+        0: String,
+        1: Int,
+        2: Float,
+        3: Bytes,
+    }) -> dict[str, Any]:
+        metadata_length = struct.unpack(">I", data[-4:])[0]
+        metadata = data[-4-metadata_length:-4]
+
+        keys = list(map(bytes.decode, metadata.split(b"\x00")))
+
+        i = 0
+        decoded = {}
+        while len(data[:-4-metadata_length]) > 0:
+            length = struct.unpack(">I", data[:4])[0]
+            ind = data[4]
+            key = data[5:5+length]
+
+            if ind not in decoders:
+                raise TypeError(f"Decoder for type '{ind}' is not found")
+
+            decoded[keys[i]] = decoders[ind].decode(key)
+
+            i += 1
+            data = data[5+length:]
+
+        return decoded
+
+class Vector(Datatype):
+    def __init__(self, x: float, y: float, z: float):
+        super().__init__()
+
+        self.x = x
+        self.y = y
+        self.z = z
+
+    def __add__(self, other: "Vector") -> "Vector":
+        return Vector(self.x + other.x, self.y + other.y, self.z + other.z)
+    
+    def __sub__(self, other: "Vector") -> "Vector":
+        return Vector(self.x - other.x, self.y - other.y, self.z - other.z)
+    
+    def __str__(self):
+        return f"Vector({self.x}, {self.y}, {self.z})"
+
+    @staticmethod
+    def encode(data: "Vector") -> bytearray:
+        return struct.pack(">fff", data.x, data.y, data.z)
+    
+    @staticmethod
+    def decode(data: bytearray) -> "Vector":
+        return Vector(*struct.unpack(">fff", data))
+
+class Movement(Dict):
+    def __init__(self, pos: Vector, ang: Vector):
+        super().__init__()
+
+        self.pos = pos
+        self.ang = ang
+
+    def __add__(self, other: "Movement"):
+        return Movement(other.pos + self.pos, other.ang + self.ang)
+    
+    def __sub__(self, other: "Movement"):
+        return Movement(self.pos - other.pos, self.ang - other.ang)
+
+    def __str__(self):
+        return f"Movement({self.pos}, {self.ang})"
+
+    @staticmethod
+    def encode(data: "Movement", encoders = { Vector: (Vector, 0) }):
+        return Dict.encode({
+            "pos": data.pos,
+            "ang": data.ang,
+        }, encoders)
+
+    @staticmethod
+    def decode(data, decoders = { 0: Vector }):
+        d = Dict.decode(data, decoders)
+        return Movement(
+            d["pos"],
+            d["ang"]
+        )

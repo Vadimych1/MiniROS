@@ -15,6 +15,7 @@ run_parser = subparsers.add_parser("run")
 create_parser = subparsers.add_parser("create")
 delete_parser = subparsers.add_parser("delete")
 install_parser = subparsers.add_parser("install")
+server_parser = subparsers.add_parser("server")
 
 run_parser.add_argument("package", type=str)
 run_parser.add_argument("args", type=list, nargs="*")
@@ -27,6 +28,9 @@ create_parser.add_argument("--requires", type=list, nargs="+")
 create_parser.add_argument("--entrypoint", type=str, default="main.py")
 
 delete_parser.add_argument("name", type=str)
+
+server_parser.add_argument("--host", type=str, default="127.0.0.1")
+server_parser.add_argument("--port", type=int, default=3000)
 
 parsed = parser.parse_args()
 
@@ -92,12 +96,14 @@ match parsed.subparser_name:
 
         folders = [
             "src",
-            "src/datatypes",
-            "src/scripts",
+            "src/source",
             "build",
         ]
         files= [
             "src/main.py",
+            "src/source/datatypes.py",
+            "src/source/__init__.py",
+            "src/__init__.py",
         ]
 
         if os.path.exists("package.xml"):
@@ -117,9 +123,18 @@ match parsed.subparser_name:
                     case "n":
                         quit(1)
 
+            else:
+                os.mkdir(fld)
+
         for file in files:
             if not os.path.exists(file):
                 open(file, "w").close()
+
+        with open("src/__init__.py", 'w') as f:
+            f.write("""
+# Add your importables here
+from source.datatypes import *
+""")
 
         doc = xml.Document()
         root = xml.Element("package")
@@ -221,13 +236,14 @@ setup(
     version='{VERSION}',
     description='miniros package',
     license='MIT',
-    packages=['{name}'],
-    keywords=['example'],
+    packages=['miniros-{name}', 'miniros-{name}.source'],
+    keywords=[],
 )
 """)
 
         # install to miniros run
-        shutil.rmtree(os.path.join(pkg_dir, "src"))
+        shutil.rmtree(pkg_dir)
+        os.makedirs(pkg_dir)
         shutil.copy2("package.xml", os.path.join(pkg_dir, "package.xml"))
         shutil.copytree("src", os.path.join(pkg_dir, "src"))
 
@@ -238,6 +254,15 @@ setup(
         subprocess.run(f"python3 -m pip install dist/{os.listdir("dist")[0]} --force")
 
         print(f"Successfully installed package '{name}'")
+
+        quit(0)
+
+    case "server":
+        from miniros.base.server import run
+        host, port = parsed.host, parsed.port
+
+        print(f"Running at {host}:{port}")
+        run(host, port)
 
         quit(0)
 

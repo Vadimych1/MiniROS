@@ -1,27 +1,8 @@
-"""
-Show/Modify/Append registry env-vars (ie `PATH`) and notify Windows-applications to pickup changes.
-
-First attempts to show/modify HKEY_LOCAL_MACHINE (all users), and 
-if not accessible due to admin-rights missing, fails-back 
-to HKEY_CURRENT_USER.
-Write and Delete operations do not proceed to user-tree if all-users succeed.
-
-Syntax: 
-    {prog}                  : Print all env-vars. 
-    {prog}  VARNAME         : Print value for VARNAME. 
-    {prog}  VARNAME   VALUE : Set VALUE for VARNAME. 
-    {prog}  +VARNAME  VALUE : Append VALUE in VARNAME delimeted with ';' (i.e. used for `PATH`). 
-    {prog}  -VARNAME        : Delete env-var value. 
-
-Note that the current command-window will not be affected, 
-changes would apply only for new command-windows.
-"""
-
 import winreg
 import sys, win32gui, win32con
 
 def reg_key(tree, path, varname):
-    return '%s\%s:%s' % (tree, path, varname) 
+    return r'%s\%s:%s' % (tree, path, varname) 
 
 def reg_entry(tree, path, varname, value):
     return '%s=%s' % (reg_key(tree, path, varname), value)
@@ -54,6 +35,8 @@ def manage_registry_env_vars(varname=None, value=None):
         try:
             with winreg.ConnectRegistry(None, tree) as reg:
                 with winreg.OpenKey(reg, path, 0, winreg.KEY_ALL_ACCESS) as key:
+                    # if value in query_value(key, varname)
+
                     if not varname:
                         for regent in yield_all_entries(tree_name, path, key):
                             print(regent)

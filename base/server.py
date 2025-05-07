@@ -4,13 +4,14 @@ from ..util.sock import TCPSockServer as SockServer
 import logging
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s [%(levelname)s] > %(message)s")
 
-from util.threads import threaded
+from miniros.util.decorators import decorators
 
-if __name__ == "__main__":
-    s = SockServer("localhost", 3000)
-
-    @threaded()
+def run(host, port):
+    s = SockServer(host, port)
+    @decorators.threaded()
     def run():
         s.run()
-
     run().join()
+
+if __name__ == "__main__":
+    run()

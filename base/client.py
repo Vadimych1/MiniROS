@@ -1,7 +1,7 @@
 from ..util.sock import TCPSockClient as SockClient
 # from ..util.sock import UDPSockClient as SockClient # UNSTABLE
-
-from util.threads import threaded
+import threading
+from miniros.util.decorators import decorators
 from typing import Callable
 import sys
 import time
@@ -34,14 +34,20 @@ class ROSClient:
 
         for c in self.__class__.__dict__:
             if c.startswith("on_"):
-                node, field = c.split("_")[1:]
-                self.fields.append((node, field, self.__getattribute__(c)))
+                data = c.split("_")[1:]
 
-    @threaded()
+                if len(data) == 2:
+                    node, field = data
+                    self.fields.append((node, field, self.__getattribute__(c)))
+                else:
+                    field = data[0]
+                    self.client.anon_handlers[field] = self.__getattribute__(c)
+
+    @decorators.threaded()
     def _run(self):
         self.client.mainloop()
 
-    def run(self):
+    def run(self) -> threading.Thread:
         self.run_thread = self._run()
         
         time.sleep(0.2)
@@ -49,13 +55,19 @@ class ROSClient:
         for (node, field, handler) in self.fields:
             self.client.subscribe(node, field, handler)
 
+        return self.run_thread
+
     def topic(self, field):
         self.client.post(field, b"")
         return Topic(field, self.client.post)
+    
+    def anon(self, node, field, data):
+        self.client.anon(node, field, data)
 
-fr = 0
-st = time.time()
 if __name__ == "__main__":
+    fr = 0
+    st = time.time()
+
     class MyROSClient1(ROSClient):
         def on_cl2_cam(self, data):
             global fr, st
