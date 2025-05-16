@@ -1,15 +1,18 @@
 VERSION = "0.0.1a"
 
-import os, platformdirs
+import os, platformdirs, platform
 import xml.dom.minidom as xml
 from argparse import ArgumentParser
 import subprocess
 import shutil
 
-parser = ArgumentParser("miniros", description="A mini but powerful self-coded version of ROS")
+parser = ArgumentParser("miniros", description="Small but powerful version of ROS")
 subparsers = parser.add_subparsers(dest="subparser_name")
 
 parser.add_argument("-v", "--version", default=False, action="store_true", dest="version")
+parser.add_argument("--python-executable", default="python" if platform.system() == "Windows" else "python3", dest="pyexec")
+parser.add_argument("--use-venv", type=str, dest="venv", default=None, help="specify path to venv folder")
+parser.add_argument("--trace", action="store_true")
 
 run_parser = subparsers.add_parser("run")
 create_parser = subparsers.add_parser("create")
@@ -34,6 +37,7 @@ server_parser.add_argument("--port", type=int, default=3000)
 
 parsed = parser.parse_args()
 
+PYTHON_EXEC = parsed.pyexec
 
 if parsed.version:
     print()
@@ -49,10 +53,11 @@ if parsed.version:
     print()
     quit(0)
 
+if parsed.venv is not None:
+    PYTHON_EXEC = os.path.join(parsed.venv, "/Scrips/python")
 
 def get_package_dir(package):
     return os.path.join(platformdirs.site_data_dir(".miniros", "Vadimych1"), package)
-
 
 def ask(prompt: str, choices=[], default=None):
     format_s = f"{prompt} {"/".join(choices)} {f"(default: {default})" if default is not None else ""} > "
@@ -61,10 +66,19 @@ def ask(prompt: str, choices=[], default=None):
         i = input(f"{prompt} {"/".join(choices)} >")
     return i if len(i) > 0 else default
 
+def trace(*args):
+    if parsed.trace:
+        print("[TRACE]", *args)
+
+trace("py executable", PYTHON_EXEC)
+trace("command", parsed.subparser_name)
+
 match parsed.subparser_name:
     case "run":
         pkg = parsed.package
         path = get_package_dir(pkg)
+
+        trace(pkg, path)
 
         if not os.path.exists(path):
             parser.error(f"Package '{pkg}' is not exists")
@@ -82,17 +96,20 @@ match parsed.subparser_name:
 
         print(f"\n> Running package '{pkg}' with entrypoint {entrypoint}\n")
 
-        subprocess.run(f"python3 \"{os.path.join(path, "src", entrypoint)}\" {" ".join(parsed.args)}")
+        subprocess.run(f"{PYTHON_EXEC} \"{os.path.join(path, "src", entrypoint)}\" {" ".join(parsed.args)}")
 
         quit(0)
 
     case "create":
         pkg = parsed.name
+        pkg = pkg.replace("-", "_").replace(" ", "_")
         maintainer = parsed.maintainer
         description = parsed.description
         authors = parsed.authors
         requires = parsed.requires
         entrypoint = parsed.entrypoint
+
+        trace(pkg, maintainer, description, authors, requires, entrypoint)
 
         folders = [
             "src",
@@ -200,13 +217,14 @@ from source.datatypes import *
 
     case "delete":
         name = parsed.name
-        
+        trace(name)
+
         try:
-            shutil.rmtree(get_package_dir(name))
+            shutil.rmtree(get_package_dir(name.replace("-", "_").replace(" ", "_")))
         except:
             pass
 
-        os.system(f"python3 -m pip uninstall miniros-{name}")
+        os.system(f"{PYTHON_EXEC} -m pip uninstall miniros_{name.replace("-", "_").replace(" ", "_")}")
 
         quit(0)
 
@@ -216,14 +234,16 @@ from source.datatypes import *
 
         doc = xml.parse("package.xml").getElementsByTagName("package")[0]
         name = doc.getElementsByTagName("name")[0].childNodes[0].nodeValue
-        pkg_dir = get_package_dir(name)
+        pkg_dir = get_package_dir(name.replace("-", "_").replace(" ", "_"))
+
+        trace(name, pkg_dir)
 
         if not os.path.exists(pkg_dir):
             os.makedirs(pkg_dir)
 
         # build
         shutil.rmtree("build")
-        shutil.copytree("src", f"build/miniros-{name}")
+        shutil.copytree("src", f"build/miniros_{name.replace("-", "_").replace(" ", "_")}")
         
         if not os.path.exists("build/__init__.py"):
             open("build/__init__.py", "w").close()
@@ -232,11 +252,11 @@ from source.datatypes import *
             f.write(f"""from setuptools import setup
 
 setup(
-    name='miniros-{name}',
+    name='miniros_{name.replace("-", "_").replace(" ", "_")}',
     version='{VERSION}',
     description='miniros package',
     license='MIT',
-    packages=['miniros-{name}', 'miniros-{name}.source'],
+    packages=['miniros_{name.replace("-", "_").replace(" ", "_")}', 'miniros_{name.replace("-", "_").replace(" ", "_")}.source'],
     keywords=[],
 )
 """)
@@ -250,8 +270,8 @@ setup(
         print("Compiling and installing package with pip")
 
         os.chdir("build")
-        subprocess.run(f"python3 setup.py sdist")
-        subprocess.run(f"python3 -m pip install dist/{os.listdir("dist")[0]} --force")
+        subprocess.run(f"{PYTHON_EXEC} setup.py sdist")
+        subprocess.run(f"{PYTHON_EXEC} -m pip install dist/{os.listdir("dist")[0]} --force")
 
         print(f"Successfully installed package '{name}'")
 
@@ -260,6 +280,8 @@ setup(
     case "server":
         from miniros.base.server import run
         host, port = parsed.host, parsed.port
+
+        trace(host, port)
 
         print(f"Running at {host}:{port}")
         run(host, port)

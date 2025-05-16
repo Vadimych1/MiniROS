@@ -29,7 +29,8 @@ client = TurtleClient()
 print("Running")
 
 t = client.run()
-post = client.topic("pos")
+post = client.topic("pos", datatypes.Vector)
+rott = client.topic("rot", datatypes.Float)
 
 x = 0
 while True:
@@ -39,8 +40,7 @@ while True:
 
     if x % 5 == 0:
         p = turtle.pos()
-        post.post(
-            datatypes.Vector.encode(
-                datatypes.Vector(p[0], 0, p[1])
-            )
-        )
+        r = turtle.heading()
+        
+        post.post(datatypes.Vector(p[0], 0, p[1]))
+        post.post(r)

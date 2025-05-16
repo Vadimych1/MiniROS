@@ -1,28 +1,30 @@
 from ..util.sock import TCPSockClient as SockClient
 # from ..util.sock import UDPSockClient as SockClient # UNSTABLE
 import threading
+from miniros.util.datatypes import Datatype
 from miniros.util.decorators import decorators
 from typing import Callable
 import sys
 import time
-
+from typing import Any
 import cv2
 import numpy as np
 
 import logging
 
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s [%(levelname)s] > %(message)s")
+logging.basicConfig(level=logging.WARNING, format="%(asctime)s [%(levelname)s] > %(message)s")
 
 class Topic:
-    def __init__(self, field: str, post_func: Callable):
+    def __init__(self, field: str, encoder: Datatype, post_func: Callable[[str, bytearray], Any]):
         self.post_func = post_func
         self.field = field
+        self.encoder = encoder
 
-    def post(self, data: bytearray):
-        self.post_func(self.field, data)
+    def post(self, data: Any) -> None:
+        self.post_func(self.field, self.encoder.encode(data))
 
 class ROSClient:
-    def __init__(self, name, ip: str = "localhost", port: int = 3000):
+    def __init__(self, name: str, ip: str = "localhost", port: int = 3000):
         self.name = name
         self.ip = ip
         self.port = port
@@ -57,9 +59,9 @@ class ROSClient:
 
         return self.run_thread
 
-    def topic(self, field):
+    def topic(self, field: str, datatype: Datatype):
         self.client.post(field, b"")
-        return Topic(field, self.client.post)
+        return Topic(field, datatype, self.client.post)
     
     def anon(self, node, field, data):
         self.client.anon(node, field, data)
