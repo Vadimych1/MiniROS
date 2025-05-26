@@ -53,8 +53,8 @@ while True:
     try:
         d = input("q/u > ")
 
-        if d == "q":
-            quit()
+        if d.strip().lower()[0] == "q":
+            break
 
         if d == "u":
             cl.client.rosstat()

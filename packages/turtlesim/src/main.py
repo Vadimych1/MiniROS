@@ -2,6 +2,7 @@ import turtle
 import miniros
 from miniros.util.decorators import decorators
 from miniros.util import datatypes
+from miniros.util.util import Ticker
 import time
 
 X = 0
@@ -33,8 +34,8 @@ post = client.topic("pos", datatypes.Vector)
 rott = client.topic("rot", datatypes.Float)
 
 x = 0
+ticker = Ticker(200)
 while True:
-    time.sleep(0.005)
     turtle.forward(X)
     turtle.right(R)
 
@@ -43,4 +44,6 @@ while True:
         r = turtle.heading()
         
         post.post(datatypes.Vector(p[0], 0, p[1]))
-        post.post(r)
+        rott.post(r)
+
+    x += 1
