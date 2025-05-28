@@ -38,3 +38,5 @@ CD to project root and run `miniros install`. Run with sudo or start with admin 
 
 ## How to run package:
 Run `miniros run <package_name>`. Now you can run only installed packages. Not installed packages (source code) can be run with Python.
+
+### See more at [docs](/docs)

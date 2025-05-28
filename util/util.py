@@ -1,4 +1,8 @@
 import time
+import multiprocessing
+from typing import Callable, Iterable, Any
+
+multiprocessing.freeze_support()
 
 class Ticker:
     """
@@ -36,3 +40,23 @@ class Ticker:
         self.time = cur
 
         return val
+
+def _call_args(a):
+    return a[0](*a[1:])
+
+def _call_noargs(f):
+    return f()
+
+def run_paralelly(tasks: Iterable[Callable], args: Iterable[Any] | None = None):
+    """
+    Run specified tasks paralelly using multiprocessing
+    """
+    if args is not None and len(tasks) != len(args):
+        raise ValueError("tasks and args length mismatch")
+    
+    pool = multiprocessing.Pool(len(tasks))
+
+    if args is not None:
+        pool.map(_call_args, zip(tasks, args))
+    else:
+        pool.map(_call_noargs, tasks)

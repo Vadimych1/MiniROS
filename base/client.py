@@ -63,7 +63,7 @@ class ROSClient:
         self.client.post(field, b"")
         return Topic(field, datatype, self.client.post)
     
-    def anon(self, node, field, data):
+    def anon(self, node: str, field: str, data: bytearray):
         self.client.anon(node, field, data)
 
 if __name__ == "__main__":

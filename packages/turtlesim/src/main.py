@@ -3,7 +3,6 @@ import miniros
 from miniros.util.decorators import decorators
 from miniros.util import datatypes
 from miniros.util.util import Ticker
-import time
 
 X = 0
 Z = 0
