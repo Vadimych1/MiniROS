@@ -10,14 +10,14 @@ R = 0
 
 class TurtleClient(miniros.ROSClient):
     def __init__(self, ip = "localhost", port = 3000):
-        super().__init__("tsm", ip, port)
+        super().__init__("turtlesim", ip, port)
 
     @decorators.parsedata(datatypes.Dict, 1)
-    def on_scl(self, data: dict, from_node: str):
+    def on_setcolor(self, data: dict, from_node: str):
         turtle.color(data["pen"], data["fill"])
 
     @decorators.parsedata(datatypes.Movement, 1)
-    def on_mvt(self, data: datatypes.Movement, from_node: str):
+    def on_move(self, data: datatypes.Movement, from_node: str):
         global X, Z, R
 
         X = data.pos.x

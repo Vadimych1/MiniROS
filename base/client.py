@@ -9,7 +9,6 @@ import time
 from typing import Any
 import cv2
 import numpy as np
-
 import logging
 
 logging.basicConfig(level=logging.WARNING, format="%(asctime)s [%(levelname)s] > %(message)s")
@@ -67,6 +66,7 @@ class ROSClient:
         self.client.anon(node, field, data)
 
 if __name__ == "__main__":
+    from miniros.util.util import Ticker
     fr = 0
     st = time.time()
 
@@ -93,8 +93,7 @@ if __name__ == "__main__":
         
         cap = cv2.VideoCapture(0)
         
-        frames = 0
-        # start_time = time.time()
+        tkr = Ticker(20)
         while cap.isOpened():
             ret, frame = cap.read()
 
@@ -103,11 +102,9 @@ if __name__ == "__main__":
             if not ret:
                 break
 
-            if True or frames % 1 == 0:
+            if tkr.check():
                 data = cv2.imencode('.jpg', frame)[1].tobytes()
                 topic1.post(data)
-
-            frames += 1
 
             if cv2.waitKey(1) == ord("q"):
                 break

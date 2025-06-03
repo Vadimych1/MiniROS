@@ -115,146 +115,177 @@ class SockServer:
                 data = self.recv(conn, addr)
                 data, datatype = data[1:], data[0]
 
-                match datatype:
-                    case Datatypes.SEND_AUTH.value:
-                        logging.debug("GOT SEND_AUTH")
+                try:
+                    match Datatypes(datatype):
+                        case Datatypes.SEND_AUTH:
+                            logging.debug("GOT SEND_AUTH")
 
-                        CREDENTIALS = data.decode()
+                            CREDENTIALS = data[1:].decode()
+                            print("Credentials", CREDENTIALS)
 
-                        if len(CREDENTIALS) != 3:
-                            self.send(conn, bytearray([Datatypes.ERROR.value, Errortypes.INVALID_CREDENTIALS.value]), addr)
-                            
-                        if CREDENTIALS in self.servers:
-                            self.send(conn, bytearray([Datatypes.ERROR.value, Errortypes.INVALID_CREDENTIALS.value]), addr)
-                            continue
+                            ## deprecated
+                            # if len(CREDENTIALS) != 3:
+                            #     self.send(conn, bytearray([Datatypes.ERROR.value, Errortypes.INVALID_CREDENTIALS.value]), addr)
 
-                        self.servers[CREDENTIALS] = {
-                            "name": CREDENTIALS,
-                            "fields": {},
-                            "socket": conn,
-                        }
+                            if CREDENTIALS in self.servers:
+                                self.send(conn, bytearray([Datatypes.ERROR.value, Errortypes.INVALID_CREDENTIALS.value]), addr)
+                                continue
 
-                    case Datatypes.GET.value:
-                        logging.debug("GOT GET")
-
-                        raw_node_name = data[0:3]
-                        raw_field_name = data[3:6]
-                        node_name = raw_node_name.decode()
-                        field_name = raw_field_name.decode()
-
-                        if node_name not in self.servers or field_name not in self.servers[field_name]:
-                            self.send(conn, bytearray([
-                                Datatypes.ERROR.value,
-                                Errortypes.INVALID_CREDENTIALS.value
-                            ]), addr)
-                            continue
-
-                        send = self.servers[node_name]["fields"][field_name]["data"]
-                        send = send if send else bytearray([])
-                        self.send(conn, bytearray([
-                            Datatypes.SEND_GET.value,
-                            *raw_node_name,
-                            *raw_field_name,
-                            *send,
-                        ]), addr)
-
-                    case Datatypes.POST.value:
-                        logging.debug("GOT POST")
-
-                        raw_field_name = data[0:3]
-                        field_name = raw_field_name.decode()
-                        if field_name not in self.servers[CREDENTIALS]["fields"]:
-                            self.servers[CREDENTIALS]["fields"][field_name] = {
-                                "data": data[3:],
-                                "subscribers": [], 
+                            self.servers[CREDENTIALS] = {
+                                "name": CREDENTIALS,
+                                "fields": {},
+                                "socket": conn,
                             }
-                        else:
-                            self.servers[CREDENTIALS]["fields"][field_name]["data"] = data[3:]
 
-                        
-                        for subscriber in self.servers[CREDENTIALS]["fields"][field_name]["subscribers"]:
-                            self.send(self.servers[subscriber]["socket"], bytearray([
+                        case Datatypes.GET:
+                            logging.debug("GOT GET")
+
+                            raw_node_name = data[0:3]
+                            raw_field_name = data[3:6]
+                            node_name = raw_node_name.decode()
+                            field_name = raw_field_name.decode()
+
+                            if node_name not in self.servers or field_name not in self.servers[field_name]:
+                                self.send(conn, bytearray([
+                                    Datatypes.ERROR.value,
+                                    Errortypes.INVALID_CREDENTIALS.value
+                                ]), addr)
+                                continue
+
+                            send = self.servers[node_name]["fields"][field_name]["data"]
+                            send = send if send else bytearray([])
+                            self.send(conn, bytearray([
                                 Datatypes.SEND_GET.value,
+                                len(raw_node_name),
+                                len(raw_field_name),
+                                *raw_node_name,
+                                *raw_field_name,
+                                *send,
+                            ]), addr)
+
+                        case Datatypes.POST:
+                            logging.debug("GOT POST")
+
+                            field_length = data[0]
+
+                            data_start = 1+field_length
+
+                            raw_field_name = data[1:data_start]
+                            field_name = raw_field_name.decode()
+
+                            if field_name not in self.servers[CREDENTIALS]["fields"]:
+                                self.servers[CREDENTIALS]["fields"][field_name] = {
+                                    "data": data[data_start:],
+                                    "subscribers": [], 
+                                }
+                            else:
+                                self.servers[CREDENTIALS]["fields"][field_name]["data"] = data[data_start:]
+
+                            
+                            for subscriber in self.servers[CREDENTIALS]["fields"][field_name]["subscribers"]:
+                                self.send(self.servers[subscriber]["socket"], bytearray([
+                                    Datatypes.SEND_GET.value,
+                                    len(CREDENTIALS),
+                                    len(raw_field_name),
+                                    *CREDENTIALS.encode(),
+                                    *raw_field_name,
+                                    *self.servers[CREDENTIALS]["fields"][field_name]["data"],
+                                ]), addr)
+                            
+
+                            self.send(conn, bytearray([
+                                Datatypes.SEND_POST.value,
+                                Status.OK.value
+                            ]), addr)
+
+                        case Datatypes.SUBSCRIBE:
+                            logging.debug("GOT SUBSCRIBE")
+
+                            name_length = data[0]
+                            field_length = data[1]
+
+                            data_start = 2+name_length+field_length
+
+                            raw_node_name = data[2:2+name_length]
+                            raw_field_name = data[2+name_length:2+name_length+field_length]
+
+                            node_name = raw_node_name.decode()
+                            field_name = raw_field_name.decode()
+
+                            if node_name not in self.servers:
+                                self.send(conn, bytearray([
+                                    Datatypes.ERROR.value,
+                                    Errortypes.INVALID_SUBSCRIBE.value
+                                ]), addr)
+                                continue
+
+                            if field_name not in self.servers[node_name]["fields"]:
+                                self.servers[node_name]["fields"][field_name] = {
+                                    "data": None,
+                                    "subscribers": [
+                                        CREDENTIALS,
+                                    ]
+                                }
+                            else:
+                                self.servers[node_name]["fields"][field_name]["subscribers"].append(CREDENTIALS)
+
+                        case Datatypes.ANON:
+                            logging.debug("GOT ANON")
+
+                            name_length = data[0]
+                            field_length = data[1]
+
+                            data_start = 2+name_length+field_length
+
+                            raw_node_name = data[2:2+name_length]
+                            raw_field_name = data[2+name_length:2+name_length+field_length]
+
+                            node_name = raw_node_name.decode()
+                            field_name = raw_field_name.decode()
+
+                            if node_name not in self.servers:
+                                self.send(conn, bytearray([
+                                    Datatypes.ERROR.value,
+                                    Errortypes.INVALID_ANON_CREDENTIALS.value
+                                ]), addr)
+                                continue
+
+                            self.send(self.servers[node_name]["socket"], bytearray([
+                                Datatypes.SEND_ANON.value,
+                                len(CREDENTIALS),
+                                len(raw_field_name),
                                 *CREDENTIALS.encode(),
                                 *raw_field_name,
-                                *self.servers[CREDENTIALS]["fields"][field_name]["data"],
+                                *data[data_start:], # additional info
                             ]), addr)
-                        
 
-                        self.send(conn, bytearray([
-                            Datatypes.SEND_POST.value,
-                            Status.OK.value
-                        ]), addr)
+                        case Datatypes.ROSSTAT:
+                            logging.debug("GOT ROSSTAT")
 
-                    case Datatypes.SUBSCRIBE.value:
-                        logging.debug("GOT SUBSCRIBE")
+                            tosend = {}
+                            for x in self.servers.keys():
+                                v = self.servers[x].copy()
 
-                        node_name = data[0:3].decode()
-                        field_name = data[3:6].decode()
+                                for fld in v["fields"].keys():
+                                    del v["fields"][fld]["data"]
 
-                        if node_name not in self.servers:
+                                del v["socket"]
+                                tosend[x] = v
+
                             self.send(conn, bytearray([
-                                Datatypes.ERROR.value,
-                                Errortypes.INVALID_SUBSCRIBE.value
+                                Datatypes.ROSSTAT.value,
+                                *json.dumps(tosend).encode()
                             ]), addr)
-                            continue
 
-                        if field_name not in self.servers[node_name]["fields"]:
-                            self.servers[node_name]["fields"][field_name] = {
-                                "data": None,
-                                "subscribers": [
-                                    CREDENTIALS,
-                                ]
-                            }
-                        else:
-                            self.servers[node_name]["fields"][field_name]["subscribers"].append(CREDENTIALS)
-
-                    case Datatypes.ANON.value:
-                        logging.debug("GOT ANON")
-
-                        raw_node_name = data[0:3]
-                        raw_field_name = data[3:6]
-
-                        node_name = raw_node_name.decode()
-                        field_name = raw_field_name.decode()
-
-                        if node_name not in self.servers:
-                            self.send(conn, bytearray([
-                                Datatypes.ERROR.value,
-                                Errortypes.INVALID_ANON_CREDENTIALS.value
-                            ]), addr)
-                            continue
-
-                        self.send(self.servers[node_name]["socket"], bytearray([
-                            Datatypes.SEND_ANON.value,
-                            *CREDENTIALS.encode(),
-                            *raw_field_name,
-                            *data[6:], # additional info
-                        ]), addr)
-
-                    case Datatypes.ROSSTAT.value:
-                        logging.debug("GOT ROSSTAT")
-
-                        tosend = {}
-                        for x in self.servers.keys():
-                            v = self.servers[x].copy()
-
-                            for fld in v["fields"].keys():
-                                del v["fields"][fld]["data"]
-
-                            del v["socket"]
-                            tosend[x] = v
-
-                        self.send(conn, bytearray([
-                            Datatypes.ROSSTAT.value,
-                            *json.dumps(tosend).encode()
-                        ]), addr)
-
-                    case _:
-                        self.send(conn, bytearray([Datatypes.ERROR.value, Errortypes.METHOD_NOT_FOUND.value]), addr)
+                        case _:
+                            raise Exception
+                
+                except Exception as e:
+                    logging.error(e)
+                    self.send(conn, bytearray([Datatypes.ERROR.value, Errortypes.METHOD_NOT_FOUND.value]), addr)
 
         except Exception as e:
-            print(e)
+            logging.error(e)
         
         finally:
             if CREDENTIALS in self.servers:
@@ -281,7 +312,7 @@ class SockClient:
         length = struct.pack(">I", length)
 
         while self.sending:
-            time.sleep(0.01)
+            time.sleep(0.005)
 
         self.sending = True
 
@@ -307,6 +338,8 @@ class SockClient:
     def subscribe(self, node: str, field: str, handler: Callable | None) -> None:
         self.send(bytearray([
             Datatypes.SUBSCRIBE.value,
+            len(node),
+            len(field),
             *node.encode(),
             *field.encode(),
         ]))
@@ -322,6 +355,8 @@ class SockClient:
     def unsubscribe(self, node: str, field: str) -> None:
         self.send(bytearray([
             Datatypes.UNSUBSCRIBE.value,
+            len(node),
+            len(field),
             *node.encode(),
             *field.encode(),
         ]))
@@ -329,6 +364,7 @@ class SockClient:
     def post(self, field: str, data: bytearray) -> None:
         self.send(bytearray([
             Datatypes.POST.value,
+            len(field),
             *field.encode(),
             *data,
         ]))
@@ -336,6 +372,8 @@ class SockClient:
     def anon(self, node: str, field: str, data: bytearray) -> None:
         self.send(bytearray([
             Datatypes.ANON.value,
+            len(node),
+            len(field),
             *node.encode(),
             *field.encode(),
             *data
@@ -351,68 +389,83 @@ class SockClient:
             data = self.recv()
             data, datatype = data[1:], data[0]
 
-            match datatype:
-                case Datatypes.REQUEST_AUTH.value:
-                    logging.debug("GOT REQUEST_AUTH")
+            try:
+                match Datatypes(datatype):
+                    case Datatypes.REQUEST_AUTH:
+                        logging.debug("GOT REQUEST_AUTH")
 
-                    CREDENTIALS = self.name.encode()
+                        CREDENTIALS = self.name.encode()
 
-                    self.send(bytearray([
-                        Datatypes.SEND_AUTH.value,
-                        *CREDENTIALS
-                    ]))
+                        self.send(bytearray([
+                            Datatypes.SEND_AUTH.value,
+                            len(CREDENTIALS),
+                            *CREDENTIALS
+                        ]))
 
-                case Datatypes.SEND_GET.value:
-                    logging.debug("GOT SEND_GET")
-                    
-                    node_name = data[0:3].decode()
-                    field_name = data[3:6].decode()
-                    
-                    if node_name not in self.received:
-                        self.received[node_name] = {}
+                    case Datatypes.SEND_GET:
+                        logging.debug("GOT SEND_GET")
+                        
+                        name_length = data[0]
+                        field_length = data[1]
 
-                    self.received[node_name][field_name] = data[6:]
-                    if node_name in self.handlers and field_name in self.handlers[node_name]:
-                        self.handlers[node_name][field_name](data[6:])
+                        data_start = 2+name_length+field_length
 
-                case Datatypes.SEND_POST.value:
-                    logging.debug("GOT SEND_POST")
+                        node_name = data[2:2+name_length].decode()
+                        field_name = data[2+name_length:2+name_length+field_length].decode()
 
-                case Datatypes.ERROR.value:
-                    logging.debug("GOT ERROR")
-                    logging.debug(data)
+                        if node_name not in self.received:
+                            self.received[node_name] = {}
 
-                    match data[0]:
-                        case Errortypes.NODE_EXISTS.value:
-                            logging.error("Node name already exists")
-                            break
+                        self.received[node_name][field_name] = data[data_start:]
+                        if node_name in self.handlers and field_name in self.handlers[node_name]:
+                            self.handlers[node_name][field_name](data[data_start:])
 
-                        case Errortypes.INVALID_CREDENTIALS.value:
-                            logging.error("Sended invalid credentials")
-                            break
+                    case Datatypes.SEND_POST:
+                        logging.debug("GOT SEND_POST")
 
-                        case Errortypes.METHOD_NOT_FOUND.value:
-                            logging.error("Requested method not found")
+                    case Datatypes.ERROR:
+                        logging.debug("GOT ERROR")
+                        logging.debug(data)
 
-                        case Errortypes.INVALID_SUBSCRIBE.value:
-                            logging.error("Sended invalid subscribe credentials")
+                        match data[0]:
+                            case Errortypes.NODE_EXISTS.value:
+                                logging.error("Node name already exists")
+                                break
 
-                case Datatypes.SEND_ANON.value:
-                    logging.debug("GOT SEND_ANON")
+                            case Errortypes.INVALID_CREDENTIALS.value:
+                                logging.error("Sended invalid credentials")
+                                break
 
-                    raw_node_name = data[0:3]
-                    raw_field_name = data[3:6]
+                            case Errortypes.METHOD_NOT_FOUND.value:
+                                logging.error("Requested method not found")
 
-                    node_name = raw_node_name.decode()
-                    field_name = raw_field_name.decode()
+                            case Errortypes.INVALID_SUBSCRIBE.value:
+                                logging.error("Sended invalid subscribe credentials")
 
-                    self.anon_handlers[field_name](data[6:], node_name)
+                            case _:
+                                logging.error("Got unknown error")
 
-                case Datatypes.ROSSTAT.value:
-                    self.on_rosstat(json.loads(data.decode()))
+                    case Datatypes.SEND_ANON:
+                        logging.debug("GOT SEND_ANON")
 
-                case _:
-                    self.send(bytearray([Datatypes.ERROR.value, Errortypes.METHOD_NOT_FOUND.value]))        
+                        name_length = data[0]
+                        field_length = data[1]
+
+                        data_start = 2+name_length+field_length
+
+                        node_name = data[2:2+name_length].decode()
+                        field_name = data[2+name_length:2+name_length+field_length].decode()
+
+                        self.anon_handlers[field_name](data[data_start:], node_name)
+
+                    case Datatypes.ROSSTAT:
+                        self.on_rosstat(json.loads(data.decode()))
+
+                    case _:
+                        raise Exception
+
+            except Exception as e:
+                self.send(bytearray([Datatypes.ERROR.value, Errortypes.METHOD_NOT_FOUND.value]))        
 
 class TCPSockServer(SockServer):
     def __init__(self, ip: str, port: int):

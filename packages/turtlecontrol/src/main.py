@@ -9,13 +9,13 @@ class TurtleControlClient(ROSClient):
             datatypes.Vector(x, 0, z),
             datatypes.Vector(0, rot, 0)
         )
-        self.anon("tsm", "mvt", datatypes.Movement.encode(data))
+        self.anon("turtlesim", "moveto", datatypes.Movement.encode(data))
 
     @decorators.parsedata(datatypes.Vector, 1)
-    def on_tsm_pos(self, data):
+    def on_turtlesim_pos(self, data):
         pass
 
-client = TurtleControlClient("tuc")
+client = TurtleControlClient("turtlecontrol")
 
 t = client.run()
 

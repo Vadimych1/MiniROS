@@ -29,6 +29,7 @@ create_parser.add_argument("--description", type=str, default="todo")
 create_parser.add_argument("--authors", type=list, nargs="+")
 create_parser.add_argument("--requires", type=list, nargs="+")
 create_parser.add_argument("--entrypoint", type=str, default="main.py")
+create_parser.add_argument("--otherexts", type=list, nargs="+", help="bash commands to install other extensions")
 
 delete_parser.add_argument("name", type=str)
 
@@ -108,6 +109,7 @@ match parsed.subparser_name:
         authors = parsed.authors
         requires = parsed.requires
         entrypoint = parsed.entrypoint
+        otherexts = parsed.otherexts
 
         trace(pkg, maintainer, description, authors, requires, entrypoint)
 
@@ -208,6 +210,17 @@ from source.datatypes import *
             authors_e.appendChild(author_e)
         root.appendChild(authors_e)
 
+        otherexts_e = xml.Element("otherexts")
+        otherexts_e.ownerDocument = doc
+        for ext in (otherexts if otherexts is not None else []):
+            ext_e = xml.Element("ext")
+            ext_e.ownerDocument = doc
+            ext_text = xml.Text()
+            ext_text.replaceWholeText("".join(ext))
+            ext_e.appendChild(ext_text)
+            otherexts_e.appendChild(ext_e)
+        root.appendChild(otherexts_e)
+
         with open("package.xml", "w") as f:
             f.write(doc.toprettyxml())
 
@@ -235,6 +248,8 @@ from source.datatypes import *
         doc = xml.parse("package.xml").getElementsByTagName("package")[0]
         name = doc.getElementsByTagName("name")[0].childNodes[0].nodeValue
         pkg_dir = get_package_dir(name.replace("-", "_").replace(" ", "_"))
+
+        otherexts = map(lambda x: x.childNodes[0].nodeValue, doc.getElementsByTagName("ext"))
 
         trace(name, pkg_dir)
 
@@ -272,6 +287,11 @@ setup(
         os.chdir("build")
         subprocess.run(f"{PYTHON_EXEC} setup.py sdist")
         subprocess.run(f"{PYTHON_EXEC} -m pip install dist/{os.listdir("dist")[0]} --force")
+        os.system("cd ../../")
+
+        print("Installing other specified extensions")
+        for x in otherexts:
+            os.system(x)
 
         print(f"Successfully installed package '{name}'")
 

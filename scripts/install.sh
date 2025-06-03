@@ -5,5 +5,5 @@
 echo "Building and installing pip package"
 cd "$(dirname "$0")" || exit 1
 cd ..
-python3 util/build.py
+python3 util/build.py "$@"
 echo "Done"
