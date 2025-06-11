@@ -1,4 +1,5 @@
 import time
+import asyncio
 import multiprocessing
 from typing import Callable, Iterable, Any
 
@@ -30,6 +31,16 @@ class Ticker:
             
         self.time = cur
 
+    async def tick_async(self):
+        """
+        Asynchronously update time with new time value and delay
+        """
+
+        cur = time.time()
+        while d := (cur - self.time) < self.delay:
+            await asyncio.sleep(d)
+            cur = time.time()
+
     def check(self):
         """
         Update timer and check is current tick available or not
@@ -37,7 +48,9 @@ class Ticker:
         
         cur = time.time()
         val = cur - self.time > self.delay
-        self.time = cur
+        
+        if val:
+            self.time = cur
 
         return val
 

@@ -7,6 +7,7 @@ from enum import Enum
 from typing import Callable
 import json
 import time
+import asyncio
 
 AddrLike = str | tuple[str, int]
 
@@ -62,6 +63,22 @@ def new_sock(use_udp: bool = False) -> socket.socket:
 
     return sock
 
+
+class Field:
+    __slots__ = ("data", "subscribers")
+    def __init__(self, data: bytearray, subscribers: list[str]):
+        self.data = data
+        self.subscribers = subscribers
+
+
+class Connection:
+    __slots__ = ("name", "fields", "socket")
+    def __init__(self, name: str, fields: dict[str, Field], socket: "socket.socket"):
+        self.name = name
+        self.fields = fields
+        self.socket = socket
+
+
 class SockServer:
     """
     Socket server base class
@@ -71,9 +88,10 @@ class SockServer:
     def __init__(self, ip: str, port: int):
         self.ip = ip
         self.port = port
-        self.servers: dict[str, dict] = {}
+        self.servers: dict[str, Connection] = {}
 
         self.sending = False # fix for byte-mismatch
+
 
     def send(self, sock: socket.socket, data: bytearray, addr: None | AddrLike) -> None:
         data = zlib.compress(data)
@@ -90,6 +108,7 @@ class SockServer:
         
         self.sending = False
 
+
     def recv(self, sock: socket.socket, addr: None | AddrLike) -> bytearray:
         try:
             length = self._recv(sock, 4, addr)
@@ -99,11 +118,14 @@ class SockServer:
         except:
             return bytearray([])
             
+
     def _recv(self, sock, length, addr):
         ...
 
+
     def _send(self, sock, data, addr):
         ...
+
 
     def handler(self, conn: socket.socket, addr: None | AddrLike) -> None:
         CREDENTIALS = None
@@ -121,21 +143,16 @@ class SockServer:
                             logging.debug("GOT SEND_AUTH")
 
                             CREDENTIALS = data[1:].decode()
-                            print("Credentials", CREDENTIALS)
-
-                            ## deprecated
-                            # if len(CREDENTIALS) != 3:
-                            #     self.send(conn, bytearray([Datatypes.ERROR.value, Errortypes.INVALID_CREDENTIALS.value]), addr)
 
                             if CREDENTIALS in self.servers:
                                 self.send(conn, bytearray([Datatypes.ERROR.value, Errortypes.INVALID_CREDENTIALS.value]), addr)
                                 continue
 
-                            self.servers[CREDENTIALS] = {
-                                "name": CREDENTIALS,
-                                "fields": {},
-                                "socket": conn,
-                            }
+                            self.servers[CREDENTIALS] = Connection(
+                                name=CREDENTIALS,
+                                fields={},
+                                socket=conn
+                            )
 
                         case Datatypes.GET:
                             logging.debug("GOT GET")
@@ -145,14 +162,14 @@ class SockServer:
                             node_name = raw_node_name.decode()
                             field_name = raw_field_name.decode()
 
-                            if node_name not in self.servers or field_name not in self.servers[field_name]:
+                            if node_name not in self.servers or field_name not in self.servers[node_name].fields:
                                 self.send(conn, bytearray([
                                     Datatypes.ERROR.value,
                                     Errortypes.INVALID_CREDENTIALS.value
                                 ]), addr)
                                 continue
 
-                            send = self.servers[node_name]["fields"][field_name]["data"]
+                            send = self.servers[node_name].fields[field_name].data
                             send = send if send else bytearray([])
                             self.send(conn, bytearray([
                                 Datatypes.SEND_GET.value,
@@ -173,23 +190,23 @@ class SockServer:
                             raw_field_name = data[1:data_start]
                             field_name = raw_field_name.decode()
 
-                            if field_name not in self.servers[CREDENTIALS]["fields"]:
-                                self.servers[CREDENTIALS]["fields"][field_name] = {
-                                    "data": data[data_start:],
-                                    "subscribers": [], 
-                                }
+                            if field_name not in self.servers[CREDENTIALS].fields:
+                                self.servers[CREDENTIALS].fields[field_name] = Field(
+                                    data=data[data_start:],
+                                    subscribers=[]
+                                )
+                                
                             else:
-                                self.servers[CREDENTIALS]["fields"][field_name]["data"] = data[data_start:]
-
+                                self.servers[CREDENTIALS].fields[field_name].data = data[data_start:]
                             
-                            for subscriber in self.servers[CREDENTIALS]["fields"][field_name]["subscribers"]:
-                                self.send(self.servers[subscriber]["socket"], bytearray([
+                            for subscriber in self.servers[CREDENTIALS].fields[field_name].subscribers:
+                                self.send(self.servers[subscriber].socket, bytearray([
                                     Datatypes.SEND_GET.value,
                                     len(CREDENTIALS),
                                     len(raw_field_name),
                                     *CREDENTIALS.encode(),
                                     *raw_field_name,
-                                    *self.servers[CREDENTIALS]["fields"][field_name]["data"],
+                                    *self.servers[CREDENTIALS].fields[field_name].data,
                                 ]), addr)
                             
 
@@ -219,15 +236,13 @@ class SockServer:
                                 ]), addr)
                                 continue
 
-                            if field_name not in self.servers[node_name]["fields"]:
-                                self.servers[node_name]["fields"][field_name] = {
-                                    "data": None,
-                                    "subscribers": [
-                                        CREDENTIALS,
-                                    ]
-                                }
+                            if field_name not in self.servers[node_name].fields:
+                                self.servers[node_name].fields[field_name] = Field(
+                                    data=None,
+                                    subscribers=[CREDENTIALS],
+                                )
                             else:
-                                self.servers[node_name]["fields"][field_name]["subscribers"].append(CREDENTIALS)
+                                self.servers[node_name].fields[field_name].subscribers.append(CREDENTIALS)
 
                         case Datatypes.ANON:
                             logging.debug("GOT ANON")
@@ -250,7 +265,7 @@ class SockServer:
                                 ]), addr)
                                 continue
 
-                            self.send(self.servers[node_name]["socket"], bytearray([
+                            self.send(self.servers[node_name].socket, bytearray([
                                 Datatypes.SEND_ANON.value,
                                 len(CREDENTIALS),
                                 len(raw_field_name),
@@ -262,20 +277,22 @@ class SockServer:
                         case Datatypes.ROSSTAT:
                             logging.debug("GOT ROSSTAT")
 
-                            tosend = {}
-                            for x in self.servers.keys():
-                                v = self.servers[x].copy()
+                            # tosend = {}
+                            # for x in self.servers.keys():
+                            #     v = self.servers[x]
 
-                                for fld in v["fields"].keys():
-                                    del v["fields"][fld]["data"]
+                            #     for fld in v.fields.keys():
+                            #         del v.fields[fld].data
 
-                                del v["socket"]
-                                tosend[x] = v
+                            #     del v.socket
+                            #     tosend[x] = v
 
-                            self.send(conn, bytearray([
-                                Datatypes.ROSSTAT.value,
-                                *json.dumps(tosend).encode()
-                            ]), addr)
+                            # self.send(conn, bytearray([
+                            #     Datatypes.ROSSTAT.value,
+                            #     *json.dumps(tosend).encode()
+                            # ]), addr)
+
+                            # TODO: fix rosstat (add json encoder to Field and Connection classes)
 
                         case _:
                             raise Exception
@@ -484,7 +501,252 @@ class TCPSockServer(SockServer):
     
     def _send(self, sock: socket.socket, data, addr):
         return sock.send(data)
+
+class TCPSockAsyncServer(SockServer):
+    def __init__(self, ip: str, port: int):
+        global _tcp_sock_server_instance
+
+        self.sock = None
+
+        super().__init__(ip, port)
+
+        _tcp_sock_server_instance = self
+
+    async def run(self) -> None:
+        self.sock: asyncio.Server = await asyncio.start_server(self.handler, self.ip, self.port)
+        async with self.sock:
+            await self.sock.serve_forever()
+
+    async def _recv(self, sock: asyncio.StreamReader, length: int, addr: None = None):
+        return await sock.readexactly(length)
     
+    async def _send(self, sock: asyncio.StreamWriter, data: bytes, addr: None = None):
+        sock.write(data)
+        await sock.drain()
+
+    async def recv(self, sock):
+        try:
+            length = await self._recv(sock, 4)
+            length = struct.unpack(">I", length)[0]
+            return zlib.decompress(await self._recv(sock, length))        
+        except:
+            return bytearray([])
+
+    async def send(self, sock, data):
+        data = zlib.compress(data)
+        length = len(data)
+        length = struct.pack(">I", length)
+
+        # while self.sending:
+        #     asyncio.sleep(0.01)
+        
+        # self.sending = True
+
+        await self._send(sock, length)
+        await self._send(sock, data)
+        
+        # self.sending = False
+
+    async def broadcast(self, sockets: list[str], data):
+        tasks = []
+        for socket in sockets.copy():
+            tasks.append(self.send(self.servers[socket].socket, data))
+        await asyncio.gather(*tasks, return_exceptions=False)
+
+    async def handler(self, r: asyncio.StreamReader, w: asyncio.StreamWriter) -> None:
+        CREDENTIALS = None
+
+        await self.send(w, bytearray([Datatypes.REQUEST_AUTH.value]))
+        
+        try:
+            while True:
+                data = await self.recv(r)
+                data, datatype = data[1:], data[0]
+
+                try:
+                    match Datatypes(datatype):
+                        case Datatypes.SEND_AUTH:
+                            logging.debug("GOT SEND_AUTH")
+
+                            CREDENTIALS = data[1:].decode()
+
+                            if CREDENTIALS in self.servers:
+                                await self.send(w, bytearray([Datatypes.ERROR.value, Errortypes.INVALID_CREDENTIALS.value]))
+                                continue
+
+                            self.servers[CREDENTIALS] = Connection(
+                                name=CREDENTIALS,
+                                fields={},
+                                socket=w
+                            )
+
+                        case Datatypes.GET:
+                            if CREDENTIALS is None: raise ConnectionError("node hasn`t sended valid credentials")
+
+                            logging.debug("GOT GET")
+
+                            raw_node_name = data[0:3]
+                            raw_field_name = data[3:6]
+                            node_name = raw_node_name.decode()
+                            field_name = raw_field_name.decode()
+
+                            if node_name not in self.servers or field_name not in self.servers[node_name].fields:
+                                await self.send(w, bytearray([
+                                    Datatypes.ERROR.value,
+                                    Errortypes.INVALID_CREDENTIALS.value
+                                ]))
+                                continue
+
+                            send = self.servers[node_name].fields[field_name].data
+                            send = send if send else bytearray([])
+                            await self.send(w, bytearray([
+                                Datatypes.SEND_GET.value,
+                                len(raw_node_name),
+                                len(raw_field_name),
+                                *raw_node_name,
+                                *raw_field_name,
+                                *send,
+                            ]))
+
+                        case Datatypes.POST:
+                            if CREDENTIALS is None: raise ConnectionError("node hasn`t sended valid credentials")
+
+                            logging.debug("GOT POST")
+
+                            field_length = data[0]
+
+                            data_start = 1+field_length
+
+                            raw_field_name = data[1:data_start]
+                            field_name = raw_field_name.decode()
+
+                            if field_name not in self.servers[CREDENTIALS].fields:
+                                self.servers[CREDENTIALS].fields[field_name] = Field(
+                                    data=data[data_start:],
+                                    subscribers=[]
+                                )
+                                
+                            else:
+                                self.servers[CREDENTIALS].fields[field_name].data = data[data_start:]
+                            
+                            await self.broadcast(self.servers[CREDENTIALS].fields[field_name].subscribers, bytearray([
+                                Datatypes.SEND_GET.value,
+                                len(CREDENTIALS),
+                                len(raw_field_name),
+                                *CREDENTIALS.encode(),
+                                *raw_field_name,
+                                *self.servers[CREDENTIALS].fields[field_name].data,
+                            ]))
+                            
+
+                            await self.send(w, bytearray([
+                                Datatypes.SEND_POST.value,
+                                Status.OK.value
+                            ]))
+
+                        case Datatypes.SUBSCRIBE:
+                            if CREDENTIALS is None: raise ConnectionError("node hasn`t sended valid credentials")
+
+                            logging.debug("GOT SUBSCRIBE")
+
+                            name_length = data[0]
+                            field_length = data[1]
+
+                            data_start = 2+name_length+field_length
+
+                            raw_node_name = data[2:2+name_length]
+                            raw_field_name = data[2+name_length:2+name_length+field_length]
+
+                            node_name = raw_node_name.decode()
+                            field_name = raw_field_name.decode()
+
+                            if node_name not in self.servers:
+                                await self.send(w, bytearray([
+                                    Datatypes.ERROR.value,
+                                    Errortypes.INVALID_SUBSCRIBE.value
+                                ]))
+                                continue
+
+                            if field_name not in self.servers[node_name].fields:
+                                self.servers[node_name].fields[field_name] = Field(
+                                    data=None,
+                                    subscribers=[CREDENTIALS],
+                                )
+                            else:
+                                self.servers[node_name].fields[field_name].subscribers.append(CREDENTIALS)
+
+                        case Datatypes.ANON:
+                            if CREDENTIALS is None: raise ConnectionError("node hasn`t sended valid credentials")
+
+                            logging.debug("GOT ANON")
+
+                            name_length = data[0]
+                            field_length = data[1]
+
+                            data_start = 2+name_length+field_length
+
+                            raw_node_name = data[2:2+name_length]
+                            raw_field_name = data[2+name_length:2+name_length+field_length]
+
+                            node_name = raw_node_name.decode()
+                            field_name = raw_field_name.decode()
+
+                            if node_name not in self.servers:
+                                await self.send(w, bytearray([
+                                    Datatypes.ERROR.value,
+                                    Errortypes.INVALID_ANON_CREDENTIALS.value
+                                ]))
+                                continue
+
+                            await self.send(self.servers[node_name].socket, bytearray([
+                                Datatypes.SEND_ANON.value,
+                                len(CREDENTIALS),
+                                len(raw_field_name),
+                                *CREDENTIALS.encode(),
+                                *raw_field_name,
+                                *data[data_start:], # additional info
+                            ]))
+
+                        case Datatypes.ROSSTAT:
+                            logging.debug("GOT ROSSTAT")
+
+                            # tosend = {}
+                            # for x in self.servers.keys():
+                            #     v = self.servers[x]
+
+                            #     for fld in v.fields.keys():
+                            #         del v.fields[fld].data
+
+                            #     del v.socket
+                            #     tosend[x] = v
+
+                            # self.send(conn, bytearray([
+                            #     Datatypes.ROSSTAT.value,
+                            #     *json.dumps(tosend).encode()
+                            # ]), addr)
+
+                            # TODO: fix rosstat (add json encoder to Field and Connection classes)
+
+                        case _:
+                            raise Exception
+                
+                except Exception as e:
+                    logging.error(e)
+                    await self.send(w, bytearray([Datatypes.ERROR.value, Errortypes.METHOD_NOT_FOUND.value]))
+
+        except Exception as e:
+            logging.error(e)
+        
+        finally:
+            if CREDENTIALS in self.servers:
+                del self.servers[CREDENTIALS]
+                for server in self.servers.values():
+                    for field in server.fields.values():
+                        try:
+                            while CREDENTIALS in field.subscribers:
+                                field.subscribers.remove(CREDENTIALS)
+                        except: pass
+
 class TCPSockClient(SockClient):
     def __init__(self, ip: str, port: int, name: str):
         self.sock = new_sock(False)

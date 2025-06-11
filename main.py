@@ -35,6 +35,7 @@ delete_parser.add_argument("name", type=str)
 
 server_parser.add_argument("--host", type=str, default="127.0.0.1")
 server_parser.add_argument("--port", type=int, default=3000)
+server_parser.add_argument("--superserver", type=str, default="", help="absolute path to superserver config")
 
 parsed = parser.parse_args()
 
@@ -97,7 +98,7 @@ match parsed.subparser_name:
 
         print(f"\n> Running package '{pkg}' with entrypoint {entrypoint}\n")
 
-        subprocess.run(f"{PYTHON_EXEC} \"{os.path.join(path, "src", entrypoint)}\" {" ".join(parsed.args)}")
+        subprocess.run(f"{PYTHON_EXEC} \"{os.path.join(path, "src", entrypoint)}\" {" ".join(map("".join, parsed.args))}")
 
         quit(0)
 
@@ -299,12 +300,55 @@ setup(
 
     case "server":
         from miniros.base.server import run
+        import asyncio
+
         host, port = parsed.host, parsed.port
 
         trace(host, port)
 
         print(f"Running at {host}:{port}")
-        run(host, port)
+        
+
+        if len(parsed.superserver.strip()) > 0:
+            from miniros import ROSClient, decorators, datatypes
+            import json
+
+            with open(parsed.superserver, "r") as f:
+                cfg = json.load(f)    
+
+            # TODO
+#             exec(f"""
+# class ServerMiddlewareClient(ROSClient):
+#     def __init__(self, ip: str = "{cfg["ip"]}", port: int = {cfg["port"]}):
+#         super().__init__("middleware_{cfg["robot_name"]}", ip, port)
+
+#     {
+#         "\n\n".join(map(lambda x: """
+#     def on_{from_node}_{from_field}(self, data):
+#         r.anon("{to_node}", "{to_field}", data)
+#     """ % x, cfg["on_robot"]))
+#     }
+
+# class RobotMiddlewareClient(ROSClient):
+#     def __init__(self, ip: str = "127.0.0.1", port: int = 3000):
+#         super().__init__("middleware_{cfg["robot_name"]}", ip, port)
+
+#     {
+#         "\n\n".join(map(lambda x: """
+#     def on_{from_node}_{from_field}(self, data):
+#         r.anon("{to_node}", "{to_field}", data)
+#     """ % x, cfg["on_server"]))
+#     }
+
+# r = RobotMiddlewareClient()
+# rt = r.run()
+
+# s = ServerMiddlewareClient()
+# st = s.run()
+
+# """)
+        
+        asyncio.run(run(host, port))
 
         quit(0)
 

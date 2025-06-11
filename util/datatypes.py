@@ -146,6 +146,32 @@ class Bytes(Datatype):
     def decode(data):
         return data
 
+
+class Vector(Datatype):
+    def __init__(self, x: float, y: float, z: float):
+        super().__init__()
+
+        self.x = x
+        self.y = y
+        self.z = z
+
+    def __add__(self, other: "Vector") -> "Vector":
+        return Vector(self.x + other.x, self.y + other.y, self.z + other.z)
+    
+    def __sub__(self, other: "Vector") -> "Vector":
+        return Vector(self.x - other.x, self.y - other.y, self.z - other.z)
+    
+    def __str__(self):
+        return f"Vector({self.x}, {self.y}, {self.z})"
+
+    @staticmethod
+    def encode(data: "Vector") -> bytearray:
+        return struct.pack(">fff", data.x, data.y, data.z)
+    
+    @staticmethod
+    def decode(data: bytearray) -> "Vector":
+        return Vector(*struct.unpack(">fff", data))
+
 class Dict(Datatype):
     @staticmethod
     def encode(data: dict[str, Any], encoders: dict[type, tuple[Datatype, int]] = {
@@ -154,6 +180,7 @@ class Dict(Datatype):
         float: (Float, 2),
         bytes: (Bytes, 3),
         bytearray: (Bytes, 3),
+        Vector: (Vector, 4)
     }) -> bytearray:
         keys = list(data.keys())
 
@@ -202,31 +229,6 @@ class Dict(Datatype):
             data = data[5+length:]
 
         return decoded
-
-class Vector(Datatype):
-    def __init__(self, x: float, y: float, z: float):
-        super().__init__()
-
-        self.x = x
-        self.y = y
-        self.z = z
-
-    def __add__(self, other: "Vector") -> "Vector":
-        return Vector(self.x + other.x, self.y + other.y, self.z + other.z)
-    
-    def __sub__(self, other: "Vector") -> "Vector":
-        return Vector(self.x - other.x, self.y - other.y, self.z - other.z)
-    
-    def __str__(self):
-        return f"Vector({self.x}, {self.y}, {self.z})"
-
-    @staticmethod
-    def encode(data: "Vector") -> bytearray:
-        return struct.pack(">fff", data.x, data.y, data.z)
-    
-    @staticmethod
-    def decode(data: bytearray) -> "Vector":
-        return Vector(*struct.unpack(">fff", data))
 
 class Movement(Dict):
     def __init__(self, pos: Vector, ang: Vector):
