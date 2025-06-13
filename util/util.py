@@ -41,6 +41,8 @@ class Ticker:
             await asyncio.sleep(d)
             cur = time.time()
 
+        self.time = cur
+
     def check(self):
         """
         Update timer and check is current tick available or not

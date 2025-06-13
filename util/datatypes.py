@@ -197,7 +197,7 @@ class Dict(Datatype):
                 l = struct.pack(">I", len(e))
                 encoded += l + bytearray([ind]) + e
             else:
-                raise TypeError(f"Encoder for type '{type(data[key])}' is not found")
+                raise TypeError(f"encoder for type '{type(data[key])}' is not found")
 
         return encoded + metadata
     
@@ -221,7 +221,7 @@ class Dict(Datatype):
             key = data[5:5+length]
 
             if ind not in decoders:
-                raise TypeError(f"Decoder for type '{ind}' is not found")
+                raise TypeError(f"decoder for type '{ind}' is not found")
 
             decoded[keys[i]] = decoders[ind].decode(key)
 
