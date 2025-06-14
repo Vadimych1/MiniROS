@@ -2,7 +2,7 @@ import threading
 
 class decorators:
     @staticmethod
-    def parsedata(datatype: type, arg: int = 0):
+    def parsedata(datatype: type, arg: int = 1):
         def wwrapper(func):
             def wrapper(*args, **kwargs):
                 args = list(args)
@@ -13,17 +13,27 @@ class decorators:
         
         return wwrapper
 
-    def symlink(name: str):
+    @staticmethod
+    def aparsedata(datatype: type, arg: int = 1):
         def wwrapper(func):
-            owner = func.__self__
-
-            symlinks = owner.symlinks if "symlinks" in owner.__dir__() else {}
-            symlinks[name] = func
-            owner.symlinks = symlinks
-
-            return func
-
+            async def wrapper(*args, **kwargs):
+                args = list(args)
+                args[arg] = datatype.decode(args[arg])
+                return await func(*args, **kwargs)
+            return wrapper
         return wwrapper
+
+    # def symlink(name: str):
+    #     def wwrapper(func):
+    #         owner = func.__self__
+
+    #         symlinks = owner.symlinks if "symlinks" in owner.__dir__() else {}
+    #         symlinks[name] = func
+    #         owner.symlinks = symlinks
+
+    #         return func
+
+    #     return wwrapper
 
     def threaded(daemon=True):
         def wwrapper(func):

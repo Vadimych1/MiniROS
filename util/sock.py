@@ -939,8 +939,8 @@ class AsyncDistrubutedClient(SockClient):
             *data,
         ]))
 
-    async def anon(self, node: str, field: str, data: bytearray) -> None:
-        if node in self.udp_servers and self.udp_servers[node].has_connection:
+    async def anon(self, node: str, field: str, data: bytearray, force_to_tcp: bool = False) -> None:
+        if not force_to_tcp and node in self.udp_servers and self.udp_servers[node].has_connection:
             raw_name = self.name.encode()
             raw_field = field.encode()
 
@@ -953,7 +953,7 @@ class AsyncDistrubutedClient(SockClient):
                 *data
             ]), (self.udp_servers[node].ip, self.udp_servers[node].port))
 
-        elif node in self.udp_servers and self.udp_servers[node].has_tried_to_connect:
+        elif force_to_tcp or node in self.udp_servers and self.udp_servers[node].has_tried_to_connect:
             await self.send(bytearray([
                 Datatypes.ANON.value,
                 len(node),

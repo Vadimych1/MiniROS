@@ -1,5 +1,5 @@
 # Topic
-Interface for posting data to topics
+Interface for posting data to topics (returned from ROSClient.topic)
 
 ### post
 data: Datatype - data to post

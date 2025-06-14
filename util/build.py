@@ -27,7 +27,7 @@ setup(
 """)
 with open("build/miniros/__init__.py", "w") as f:
     f.write(f"""
-from miniros.base.client import Topic, ROSClient
+from miniros.base.client import Topic, AsyncTopic, ROSClient, AsyncROSClient
 from miniros.util.decorators import decorators
 import miniros.util.datatypes as datatypes
 import miniros.util.util as utils

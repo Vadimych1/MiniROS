@@ -1,6 +1,6 @@
 from miniros.util.sock import TCPSockClient as SockClient
 from miniros.util.sock import AsyncDistrubutedClient as AsyncSockClient
-
+import asyncio
 import threading
 from miniros.util.datatypes import Datatype
 from miniros.util.decorators import decorators
@@ -92,66 +92,82 @@ class AsyncROSClient(ROSClient):
                     field = data[0]
                     self.client.anon_handlers[field] = self.__getattribute__(c)
 
-    async def run(self):
+    async def wait(self, sub_when_activated: bool = True):
+        """
+        Wait for mainloop to start.
+        
+        Can be used when running client mainloop and main code with asyncio.gather
+        """
+
+        while not self.client._is_running or self.client.w is None or self.client.r is None:
+            await asyncio.sleep(0.1)
+
+        if sub_when_activated:
+            await self.sub()
+
+    async def sub(self):
+        """
+        Subscribe to provided topic handlers
+        """
+
         for (node, field, handler) in self.fields:
             await self.client.subscribe(node, field, handler)
 
+    async def run(self):
         await self.client.mainloop()
 
     async def topic(self, field: str, datatype: Datatype):
         await self.client.post(field, b"")
         return AsyncTopic(field, datatype, self.client.post)
     
-    async def anon(self, node: str, field: str, data: bytes):
-        await self.client.anon(node, field, data)
+    async def anon(self, node: str, field: str, data: bytes, /, force_to_tcp: bool = False):
+        await self.client.anon(node, field, data, force_to_tcp)
 
-if __name__ == "__main__":
-    import asyncio
-    
-    class Client1(AsyncROSClient):
-        def __init__(self, ip="localhost", port=3000):
-            super().__init__("client1", ip, port)
+# if __name__ == "__main__":    
+#     class Client1(AsyncROSClient):
+#         def __init__(self, ip="localhost", port=3000):
+#             super().__init__("client1", ip, port)
         
-        async def on_hello(self, data, node):
-            print(data, node)
+#         async def on_hello(self, data, node):
+#             print(data, node)
 
-            print("GOT GOT GOT !!!! YEEEEE")
+#             print("GOT GOT GOT !!!! YEEEEE")
 
-    class Client2(AsyncROSClient):
-        def __init__(self, ip="localhost", port=3000):
-            super().__init__("client2", ip, port)
+#     class Client2(AsyncROSClient):
+#         def __init__(self, ip="localhost", port=3000):
+#             super().__init__("client2", ip, port)
 
-    if False:
-        client = Client1()
-        asyncio.run(client.run())
+#     if False:
+#         client = Client1()
+#         asyncio.run(client.run())
 
-    else:
-        from miniros.util.util import Ticker
+#     else:
+#         from miniros.util.util import Ticker
 
-        ticker = Ticker(0.5)
+#         ticker = Ticker(0.5)
 
-        client = Client2()
+#         client = Client2()
 
-        async def main():
-            while not client.client._is_running:
-                await asyncio.sleep(0.5)
+#         async def main():
+#             while not client.client._is_running:
+#                 await asyncio.sleep(0.5)
 
-            print("Sending!")
+#             print("Sending!")
 
-            while True:
-                await ticker.tick_async()
-                await client.anon(
-                    "client1",
-                    "hello",
-                    b"Hello, world!"
-                )
+#             while True:
+#                 await ticker.tick_async()
+#                 await client.anon(
+#                     "client1",
+#                     "hello",
+#                     b"Hello, world!"
+#                 )
         
-        async def run():
-            await asyncio.gather(
-                client.run(),
-                main(),
-            )  
+#         async def run():
+#             await asyncio.gather(
+#                 client.run(),
+#                 main(),
+#             )  
 
-        asyncio.run(
-            run()
-        )
+#         asyncio.run(
+#             run()
+#         )
