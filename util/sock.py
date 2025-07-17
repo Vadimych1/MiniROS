@@ -59,13 +59,13 @@ def new_sock(use_udp: bool = False) -> socket.socket:
     """
     
     sock = None
-    if "AF_UNIX" in socket.__dict__:
+    if "AF_UNIX" in socket.__dict__ and False: # TODO: fix unix sockets
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM if use_udp else socket.SOCK_STREAM)
 
     else:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM if use_udp else socket.SOCK_STREAM)
 
-    sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1) if not use_udp else ...
+    # sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1) if not use_udp else ...
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1024 * 1024 * 32)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1024 * 1024 * 32)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -498,7 +498,7 @@ class SockClient:
 class TCPSockServer(SockServer):
     def __init__(self, ip: str, port: int):
         self.sock = new_sock(False)
-        self.sock.bind((ip, port))
+        self.sock.bind((ip.encode(), port))
         super().__init__(ip, port)
 
     def run(self) -> None:
@@ -516,7 +516,7 @@ class TCPSockServer(SockServer):
 class TCPSockClient(SockClient):
     def __init__(self, ip: str, port: int, name: str):
         self.sock = new_sock(False)
-        self.sock.connect((ip, port))
+        self.sock.connect((ip.encode(), port))
         super().__init__(ip, port, name)
 
     def _recv(self, length):
