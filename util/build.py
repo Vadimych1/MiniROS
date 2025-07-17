@@ -1,7 +1,7 @@
 import shutil, subprocess, os, argparse
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--version", "-v", type=str, required=True)
+parser.add_argument("--version", "-v", type=str, default="1.0.2b0")
 pd = parser.parse_args()
 
 VERSION = pd.version
@@ -44,8 +44,5 @@ os.chdir("build")
 try: shutil.rmtree("./dist", True) # remove prev dists
 except: pass
 
-r = subprocess.run(f"python3 setup.py sdist")
-r.check_returncode()
-
-r = subprocess.run(f"python3 -m pip install dist/{os.listdir("dist")[0]} --force")
-r.check_returncode()
+os.system(f"python3 setup.py sdist")
+os.system(f"python3 -m pip install dist/{os.listdir('dist')[0]} --force --break-system-packages")

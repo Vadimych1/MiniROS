@@ -83,20 +83,20 @@ class OpenCVImageType(Enum):
     GRAYSCALE = 0x01
     BGR = 0x02
 _img_type_to_cv = {
-    OpenCVImageType.RGB: cv.IMREAD_COLOR_RGB,
+    OpenCVImageType.RGB: cv.IMREAD_COLOR,
     OpenCVImageType.GRAYSCALE: cv.IMREAD_GRAYSCALE,
-    OpenCVImageType.BGR: cv.IMREAD_COLOR_BGR,
+    OpenCVImageType.BGR: cv.IMREAD_COLOR,
 }
 # _cv_to_img_type = {value: key for key, value in _img_type_to_cv.items()} # uncomment if needed
 class OpenCVImage(NumpyArray):
     @staticmethod
-    def decode(data: bytearray) -> cv.Mat:
+    def decode(data: bytearray) -> "cv.Mat":
         datatype = OpenCVImageType(data[0])
         arr = NumpyArray.decode(data[1:])
         return cv.imdecode(arr, _img_type_to_cv[datatype])
     
     @staticmethod
-    def encode(image: cv.Mat, datatype: OpenCVImageType) -> bytearray:
+    def encode(image: "cv.Mat", datatype: OpenCVImageType) -> bytearray:
         arr = cv.imencode(".jpg", image)[1]
         return bytearray([datatype.value]) + NumpyArray.encode(arr)
 

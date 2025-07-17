@@ -1,9 +1,8 @@
-VERSION = "0.0.1a"
+VERSION = "1.0.1a"
 
 import os, platformdirs, platform
 import xml.dom.minidom as xml
 from argparse import ArgumentParser
-import subprocess
 import shutil
 
 parser = ArgumentParser("miniros", description="Small but powerful version of ROS")
@@ -56,16 +55,20 @@ if parsed.version:
     quit(0)
 
 if parsed.venv is not None:
-    PYTHON_EXEC = os.path.join(parsed.venv, "/Scrips/python")
+    PYTHON_EXEC = os.path.join(parsed.venv, "/Scrips/python3")
 
 def get_package_dir(package):
-    return os.path.join(platformdirs.site_data_dir(".miniros", "Vadimych1"), package)
+    if platform.system() == "Windows":
+        return os.path.join(platformdirs.site_data_dir(".miniros", "Vadimych1"), package)
+
+    else:
+        return os.path.join("/var", "lib", ".miniros", package)
 
 def ask(prompt: str, choices=[], default=None):
-    format_s = f"{prompt} {"/".join(choices)} {f"(default: {default})" if default is not None else ""} > "
+    format_s = f"{prompt} {'/'.join(choices)} {f'(default: {default})' if default is not None else ''} > "
     i = input(format_s)
     while (len(i) == 0 and default is None) or i not in choices:
-        i = input(f"{prompt} {"/".join(choices)} >")
+        i = input(f"{prompt} {'/'.join(choices)} >")
     return i if len(i) > 0 else default
 
 def trace(*args):
@@ -98,7 +101,7 @@ match parsed.subparser_name:
 
         print(f"\n> Running package '{pkg}' with entrypoint {entrypoint}\n")
 
-        subprocess.run(f"{PYTHON_EXEC} \"{os.path.join(path, "src", entrypoint)}\" {" ".join(map("".join, parsed.args))}")
+        os.system(f"{PYTHON_EXEC} \"{os.path.join(path, 'src', entrypoint)}\" {' '.join(map(''.join, parsed.args))}")
 
         quit(0)
 
@@ -238,7 +241,7 @@ from source.datatypes import *
         except:
             pass
 
-        os.system(f"{PYTHON_EXEC} -m pip uninstall miniros_{name.replace("-", "_").replace(" ", "_")}")
+        os.system(f"{PYTHON_EXEC} -m pip uninstall miniros_{name.replace('-', '_').replace(' ', '_')}")
 
         quit(0)
 
@@ -259,7 +262,7 @@ from source.datatypes import *
 
         # build
         shutil.rmtree("build")
-        shutil.copytree("src", f"build/miniros_{name.replace("-", "_").replace(" ", "_")}")
+        shutil.copytree("src", f"build/miniros_{name.replace('-', '_').replace(' ', '_')}")
         
         if not os.path.exists("build/__init__.py"):
             open("build/__init__.py", "w").close()
@@ -268,11 +271,11 @@ from source.datatypes import *
             f.write(f"""from setuptools import setup
 
 setup(
-    name='miniros_{name.replace("-", "_").replace(" ", "_")}',
+    name='miniros_{name.replace('-', '_').replace(' ', '_')}',
     version='{VERSION}',
     description='miniros package',
     license='MIT',
-    packages=['miniros_{name.replace("-", "_").replace(" ", "_")}', 'miniros_{name.replace("-", "_").replace(" ", "_")}.source'],
+    packages=['miniros_{name.replace('-', '_').replace(' ', '_')}', 'miniros_{name.replace('-', '_').replace(' ', '_')}.source'],
     keywords=[],
 )
 """)
@@ -286,8 +289,9 @@ setup(
         print("Compiling and installing package with pip")
 
         os.chdir("build")
-        subprocess.run(f"{PYTHON_EXEC} setup.py sdist")
-        subprocess.run(f"{PYTHON_EXEC} -m pip install dist/{os.listdir("dist")[0]} --force")
+        
+        os.system(f"{PYTHON_EXEC} ./setup.py sdist")
+        os.system(f"{PYTHON_EXEC} -m pip install dist/{os.listdir('dist')[0]} --force --break-system-packages")
         os.system("cd ../../")
 
         print("Installing other specified extensions")
