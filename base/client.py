@@ -30,12 +30,13 @@ class AsyncTopic:
         await self.post_func(self.field, self.encoder.encode(data))
 
 class ROSClient:
-    def __init__(self, name: str, ip: str = "localhost", port: int = 3000):
+    def __init__(self, name: str, ip: str = "localhost", port: int = 3000, _sub=False):
         self.name = name
         self.ip = ip
         self.port = port
 
-        self.client = SockClient(ip, port, name)
+        if not _sub:
+            self.client = SockClient(ip, port, name)
         self.run_thread = None
         
         self.fields = []
@@ -73,14 +74,18 @@ class ROSClient:
         self.client.anon(node, field, data)
 
 class AsyncROSClient(ROSClient):
-    def __init__(self, name, ip = "localhost", port = 3000):
-        super().__init__(name, ip, port)
+    def __init__(self, name, ip = "localhost", port = 3000, _parse_handlers=True):
+        super().__init__(name, ip, port, True)
 
         self.client = AsyncSockClient(ip, port, name)
 
         self.fields = []
         self.client.anon_handlers = {}
         
+        if _parse_handlers:
+            self._parse_handlers()
+        
+    def _parse_handlers(self):
         for c in self.__class__.__dict__:
             if c.startswith("on_"):
                 data = c.split("_")[1:]

@@ -307,48 +307,77 @@ setup(
         trace(host, port)
 
         print(f"Running at {host}:{port}")
-        
 
         if len(parsed.superserver.strip()) > 0:
-            from miniros import ROSClient, decorators, datatypes
+            from miniros import AsyncROSClient
+            from miniros.base.server import AsyncDistributedServer
             import json
 
+            trace(parsed.superserver)
             with open(parsed.superserver, "r") as f:
-                cfg = json.load(f)    
+                cfg = json.load(f)
 
-            # TODO
-#             exec(f"""
-# class ServerMiddlewareClient(ROSClient):
-#     def __init__(self, ip: str = "{cfg["ip"]}", port: int = {cfg["port"]}):
-#         super().__init__("middleware_{cfg["robot_name"]}", ip, port)
+                lip, lport = cfg["local_ip"], cfg["local_port"]
+                rip, rport = cfg["remote_ip"], cfg["remote_port"]
 
-#     {
-#         "\n\n".join(map(lambda x: """
-#     def on_{from_node}_{from_field}(self, data):
-#         r.anon("{to_node}", "{to_field}", data)
-#     """ % x, cfg["on_robot"]))
-#     }
+                name = cfg["robot_name"]
 
-# class RobotMiddlewareClient(ROSClient):
-#     def __init__(self, ip: str = "127.0.0.1", port: int = 3000):
-#         super().__init__("middleware_{cfg["robot_name"]}", ip, port)
+                class OnRobotClient(AsyncROSClient):
+                    ...
 
-#     {
-#         "\n\n".join(map(lambda x: """
-#     def on_{from_node}_{from_field}(self, data):
-#         r.anon("{to_node}", "{to_field}", data)
-#     """ % x, cfg["on_server"]))
-#     }
+                class OnServerClient(AsyncROSClient):
+                    ...
 
-# r = RobotMiddlewareClient()
-# rt = r.run()
+                robot_client = OnRobotClient(name, _parse_handlers=False, ip=lip, port=lport)
+                server_client = OnServerClient(name, _parse_handlers=False, ip=rip, port=rport)
 
-# s = ServerMiddlewareClient()
-# st = s.run()
+                for forwarder in cfg["on_robot"]:
+                    async def _forward(self, data):
+                        robot_client.wait(False)
+                        await robot_client.anon(
+                            forwarder["to_node"],
+                            forwarder["to_field"],
+                            data
+                        )
 
-# """)
-        
-        asyncio.run(run(host, port))
+                    server_client.__setattr__(f"on_{forwarder["from_node"]}_{forwarder["from_field"]}", _forward)
+
+
+                for forwarder in cfg["on_server"]:
+                    async def _forward(self, data):
+                        server_client.wait(False)
+                        await server_client.anon(
+                            forwarder["to_node"],
+                            forwarder["to_field"],
+                            data
+                        )
+
+                    robot_client.__setattr__(f"on_{forwarder["from_node"]}_{forwarder["from_field"]}", _forward)
+
+                server_client._parse_handlers()
+                robot_client._parse_handlers()
+
+                s = AsyncDistributedServer(host, port)
+
+                async def run_srv_client():
+                    await s.wait()
+                    await server_client.run()
+
+                async def run_rbt_client():
+                    await s.wait()
+                    await server_client.run()
+
+                async def main():
+                    await asyncio.gather(
+                        s.run(),
+                        run_srv_client(),
+                        run_rbt_client(),
+                    )
+
+                asyncio.run(main())
+
+        else:
+            asyncio.run(run(host, port))
 
         quit(0)
 

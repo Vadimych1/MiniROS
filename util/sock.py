@@ -538,6 +538,7 @@ class AsyncDistributedServer(SockServer):
     def __init__(self, ip: str, port: int):
 
         self.sock = None
+        self.running = False
         # self.udp_transport = None
         # self.udp_protocol = None
         
@@ -559,8 +560,12 @@ class AsyncDistributedServer(SockServer):
             # self.udp_handler(),
         # )
 
+        self.running = True
         await self.sock.serve_forever()
 
+    async def wait(self) -> None:
+        while not self.running:
+            await asyncio.sleep(0.05)
 
     async def _tcp_recv(self, sock: asyncio.StreamReader, length: int, addr: None = None):
         return await sock.readexactly(length)
