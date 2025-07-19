@@ -1,4 +1,24 @@
 import asyncio
+import traceback
+
+def fmt_error(e: Exception):
+    return "\n".join(traceback.format_exception(e))
+
+def fail_test():
+    raise Exception("failed")
+    
+def pass_test():
+    raise Exception("passed")
+
+def check_pass(e: Exception):
+    if e.args[0] == "passed":
+        return True, ""
+    
+    elif e.args[0] == "failed":
+        return False, ""
+    
+    else:
+        return False, fmt_error(e)
 
 class UnitTest:    
     async def test(self) -> bool:
@@ -38,5 +58,3 @@ def run_tests(tests: list[UnitTest]):
             failed += 1
         
     print(f"\033[37mAll: {len(tests)}\033[0m | \033[32mPassed: {passed}\033[0m | \033[31mFailed: {failed}\033[0m")
-    
-run_tests([])
