@@ -35,23 +35,24 @@ class ROSClient:
         self.ip = ip
         self.port = port
 
-        if not _sub:
-            self.client = SockClient(ip, port, name)
-        self.run_thread = None
-        
         self.fields = []
 
-        for c in self.__class__.__dict__:
-            if c.startswith("on_"):
-                data = c.split("_")[1:]
+        if not _sub:
+            self.client = SockClient(ip, port, name)
+        
+            for c in self.__class__.__dict__:
+                if c.startswith("on_"):
+                    data = c.split("_")[1:]
 
-                if len(data) == 2:
-                    node, field = data
-                    self.fields.append((node, field, self.__getattribute__(c)))
-                else:
-                    field = data[0]
-                    self.client.anon_handlers[field] = self.__getattribute__(c)
-
+                    if len(data) == 2:
+                        node, field = data
+                        self.fields.append((node, field, self.__getattribute__(c)))
+                    else:
+                        field = data[0]
+                        self.client.anon_handlers[field] = self.__getattribute__(c)
+        
+        self.run_thread = None
+        
     @decorators.threaded()
     def _run(self):
         self.client.mainloop()
