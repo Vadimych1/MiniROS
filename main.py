@@ -323,6 +323,10 @@ setup(
 
                 lip, lport = cfg["local_ip"], cfg["local_port"]
                 rip, rport = cfg["remote_ip"], cfg["remote_port"]
+                
+                print("\nSuperserver configuration:")
+                print(f"LOCAL:{lip}:{lport}")
+                print(f"REMOTE:{rip}:{rport}\n")
 
                 name = cfg["robot_name"]
 
