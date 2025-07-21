@@ -1,4 +1,4 @@
-from .base import UnitTest
+from .base import UnitTest, fail_test, pass_test, check_pass
 from miniros import AsyncROSClient
 from miniros import datatypes
 import asyncio
@@ -11,26 +11,32 @@ class AuthTest(UnitTest):
             await asyncio.sleep(1)
             
             if client.client._is_running:
-                raise Exception("passed")
+                pass_test()
             else:
-                raise Exception("failed")
+                fail_test()
             
         try:
             await asyncio.gather(
                 client.run(),
                 wait()
             )
+            
         except Exception as e:
-            if e.args[0] == "passed":
-                return True, ""
-        
-            return False, f"{e}"
+            return check_pass(e)
         
         
 class PostTest(UnitTest):
     async def test(self):
         send_data = b'Hello, world!'
         recv_data = b''
+        
+        class RecvClient(AsyncROSClient):
+            def on_send_test(self, data):
+                nonlocal recv_data
+                recv_data = data       
+        
+        send_client = AsyncROSClient("send")
+        receive_client = RecvClient("recv")
         
         async def wait():
             await send_client.wait()
@@ -44,17 +50,9 @@ class PostTest(UnitTest):
             await asyncio.sleep(1)
             
             if send_data == recv_data:
-                raise Exception("passed")
+                pass_test()
             else:
-                raise Exception("failed")
-        
-        class RecvClient(AsyncROSClient):
-            def on_send_test(self, data):
-                nonlocal recv_data
-                recv_data = data       
-        
-        send_client = AsyncROSClient("send")
-        receive_client = RecvClient("recv")
+                fail_test()
         
         async def run_receive():
             await send_client.wait()
@@ -64,11 +62,7 @@ class PostTest(UnitTest):
             await asyncio.gather(send_client.run(), run_receive(), wait())
             
         except Exception as e:
-            if e.args[0] == "passed":
-                return True, ""
-        
-            return False, f"{e}\n{e.__traceback__}"
-
+            return check_pass(e)
 
 class AnonTest(UnitTest):
     async def test(self):
@@ -94,15 +88,12 @@ class AnonTest(UnitTest):
             await asyncio.sleep(1)
             
             if send_data == recv_data:
-                raise Exception("passed")
+                pass_test()
             else:
-                raise Exception("failed")
+                fail_test()
             
         try:   
             await asyncio.gather(send_client.run(), recv_client.run(), wait())
             
         except Exception as e:
-            if e.args[0] == "passed":
-                return True, ""
-        
-            return False, f"{e}\n{e.__traceback__}"
+            return check_pass(e)
