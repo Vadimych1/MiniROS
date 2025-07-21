@@ -163,6 +163,10 @@ class SockServer:
         try:
             while True:
                 data = self.recv(conn, addr)
+                
+                if len(data) <= 0:
+                    break # TODO: get reason of data len 0
+                
                 data, datatype = data[1:], data[0]
 
                 try:
@@ -911,6 +915,8 @@ class AsyncDistrubutedClient(SockClient):
         self.transport: _ClientRecvProtocol = None
 
         self._is_running = False
+        
+        self._is_receiving = False
 
 
     async def subscribe(self, node: str, field: str, handler: Callable | None) -> None:
@@ -1027,7 +1033,14 @@ class AsyncDistrubutedClient(SockClient):
 
 
     async def _recv(self, length: int) -> bytes:
-        return await self.r.readexactly(length)
+        while self._is_receiving:
+            await asyncio.sleep(0.01)
+            
+        self._is_receiving = True
+        data = await self.r.readexactly(length)
+        self._is_receiving = False
+        
+        return data
     
     async def _send(self, data) -> None:
         self.w.write(data)
@@ -1038,7 +1051,8 @@ class AsyncDistrubutedClient(SockClient):
             length = await self._recv(4)
             length = struct.unpack(">I", length)[0]
             return zlib.decompress(await self._recv(length))
-        except:
+        except Exception as e:
+            print(e)
             return bytes([])
         
     async def send(self, data):
@@ -1066,6 +1080,11 @@ class AsyncDistrubutedClient(SockClient):
     async def _tcp_mainloop(self):
         while True:
             data = await self.recv()
+            
+            if len(data) <= 0 and self.w.transport.is_closing():
+                print("CLOSED!")
+                break
+            
             data, datatype = data[1:], data[0]
 
             try:
