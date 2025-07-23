@@ -9,7 +9,7 @@ import json
 import time
 import asyncio
 import random
-
+import traceback
 
 AddrLike = str | tuple[str, int]
 
@@ -332,11 +332,11 @@ class SockServer:
                             raise Exception
                 
                 except Exception as e:
-                    logging.error(e)
+                    logging.error("\n".join(traceback.format_exception(e)))
                     self.send(conn, bytes([Datatypes.ERROR.value, Errortypes.METHOD_NOT_FOUND.value]), addr)
 
         except Exception as e:
-            logging.error(e)
+            logging.error("\n".join(traceback.format_exception(e)))
         
         finally:
             if CREDENTIALS in self.servers:
@@ -689,7 +689,7 @@ class AsyncDistributedServer(SockServer):
                             raise Exception
                 
                 except Exception as e:
-                    logging.error(e)
+                    logging.error("\n".join(traceback.format_exception(e)))
                     await self._error(w, Errortypes.METHOD_NOT_FOUND)
 
         except Exception as e:
