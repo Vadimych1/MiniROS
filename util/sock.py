@@ -701,18 +701,18 @@ class AsyncDistributedServer(SockServer):
                         
 
     async def _cleanup(self, CREDENTIALS):
-        
-        # unsubscribe from all topics
-        for server in self.servers.values():
-            for field in server.fields.values():
-                try:
-                    while CREDENTIALS in field.subscribers:
-                        field.subscribers.remove(CREDENTIALS)
-                except: pass
+        if CREDENTIALS in self.servers:
+            # unsubscribe from all topics
+            for server in self.servers.values():
+                for field in server.fields.values():
+                    try:
+                        while CREDENTIALS in field.subscribers:
+                            field.subscribers.remove(CREDENTIALS)
+                    except: pass
+                    
+            # set client socket to None
+            self.servers[CREDENTIALS].socket = None 
                 
-        # set client socket to None
-        self.servers[CREDENTIALS].socket = None 
-            
                     
     async def _check(self, CREDENTIALS):
         if CREDENTIALS is None: 

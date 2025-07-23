@@ -350,7 +350,9 @@ setup(
                             data
                         )
 
-                    server_client.__setattr__(f"on_{forwarder['from_node']}_{forwarder['from_field']}", _forward)
+                    server_client.fields.append(
+                        (forwarder['from_node'], forwarder['from_field'], _forward)
+                    )
 
 
                 for forwarder in cfg["on_server"]:
@@ -364,10 +366,12 @@ setup(
                             data
                         )
 
-                    robot_client.__setattr__(f"on_{forwarder['from_node']}_{forwarder['from_field']}", _forward)
-
-                server_client._parse_handlers()
-                robot_client._parse_handlers()
+                    robot_client.fields.append(
+                        (forwarder['from_node'], forwarder['from_field'], _forward)
+                    )
+                
+                print(server_client.fields)
+                print(robot_client.fields)
 
                 s = AsyncDistributedServer(host, port)
 
