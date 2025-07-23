@@ -377,12 +377,18 @@ setup(
 
                 async def run_srv_client():
                     await s.wait()
-                    await server_client.run()
+                    await asyncio.gather(
+                        server_client.run(),
+                        server_client.wait()                        
+                    )
 
                 async def run_rbt_client():
                     await s.wait()
-                    await server_client.run()
-
+                    await asyncio.gather(
+                        robot_client.run(),
+                        robot_client.wait()                        
+                    )
+                    
                 async def main():
                     await asyncio.gather(
                         s.run(),
