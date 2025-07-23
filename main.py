@@ -341,6 +341,8 @@ setup(
 
                 for forwarder in cfg["on_robot"]:
                     async def _forward(self, data):
+                        print("forwarding", forwarder)
+                        
                         robot_client.wait(False)
                         await robot_client.anon(
                             forwarder["to_node"],
@@ -353,6 +355,8 @@ setup(
 
                 for forwarder in cfg["on_server"]:
                     async def _forward(self, data):
+                        print("forwarding", forwarder)
+                        
                         server_client.wait(False)
                         await server_client.anon(
                             forwarder["to_node"],
