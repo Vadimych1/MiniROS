@@ -341,7 +341,7 @@ setup(
 
                 for forwarder in cfg["on_robot"]:
                     async def _forward(data):
-                        robot_client.wait(False)
+                        await robot_client.wait(False)
                         await robot_client.anon(
                             forwarder["to_node"],
                             forwarder["to_field"],
@@ -355,7 +355,7 @@ setup(
 
                 for forwarder in cfg["on_server"]:
                     async def _forward(data):
-                        server_client.wait(False)
+                        await server_client.wait(False)
                         await server_client.anon(
                             forwarder["to_node"],
                             forwarder["to_field"],
@@ -365,9 +365,6 @@ setup(
                     robot_client.fields.append(
                         (forwarder['from_node'], forwarder['from_field'], _forward)
                     )
-                
-                print(server_client.fields)
-                print(robot_client.fields)
 
                 s = AsyncDistributedServer(host, port)
 

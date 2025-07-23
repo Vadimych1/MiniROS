@@ -762,7 +762,7 @@ class AsyncDistributedServer(SockServer):
         raw_node_name = data[2:2+name_length]
         raw_field_name = data[2+name_length:2+name_length+field_length]
 
-        if raw_node_name not in self.servers:
+        if raw_node_name not in self.servers or self.servers[raw_node_name].socket is None:
             return await self._error(w, Errortypes.INVALID_ANON_CREDENTIALS)
 
         await self.tcp_send(self.servers[raw_node_name].socket, bytes([
