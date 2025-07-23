@@ -701,14 +701,17 @@ class AsyncDistributedServer(SockServer):
                         
 
     async def _cleanup(self, CREDENTIALS):
-        if CREDENTIALS in self.servers:
-            del self.servers[CREDENTIALS]
-            for server in self.servers.values():
-                for field in server.fields.values():
-                    try:
-                        while CREDENTIALS in field.subscribers:
-                            field.subscribers.remove(CREDENTIALS)
-                    except: pass
+        
+        # unsubscribe from all topics
+        for server in self.servers.values():
+            for field in server.fields.values():
+                try:
+                    while CREDENTIALS in field.subscribers:
+                        field.subscribers.remove(CREDENTIALS)
+                except: pass
+                
+        # set client socket to None
+        self.servers[CREDENTIALS].socket = None 
             
                     
     async def _check(self, CREDENTIALS):
@@ -725,12 +728,15 @@ class AsyncDistributedServer(SockServer):
                         
                         
     async def _handle_error(self, data):
-        try:
-            logging.warning(Errortypes(data[1]))
-        
-        except:
-            logging.warning(f'Got unknown error: {hex(data[1])}')
+        if len(data) >= 1:    
+            try:
+                logging.warning(Errortypes(data[0]))
+            
+            except:
+                logging.warning(f'Got unknown error: {hex(data[0])}')
 
+        else:
+            logging.warning(f'Got unknown error {data}')
 
     async def _handle_rosstat(self, w):
         tosend = {}
@@ -738,9 +744,12 @@ class AsyncDistributedServer(SockServer):
             v = self.servers[x]
             tosend[x] = v.to_json()
 
+        data = json.dumps(tosend).encode()
+
         await w(bytes([
             Datatypes.ROSSTAT.value,
-            *json.dumps(tosend).encode()
+            len(data),
+            *data
         ]))
       
         
@@ -773,8 +782,18 @@ class AsyncDistributedServer(SockServer):
         raw_node_name = data[2:2+name_length]
         raw_field_name = data[2+name_length:2+name_length+field_length]
 
+        ## old logic: fails when superserver is used (superserver connects before other nodes)
+        # if raw_node_name not in self.servers:
+        #     return await self._error(w, Errortypes.INVALID_SUBSCRIBE)
+
+        # new logic: creates server and topic if someone wants to subscribe
         if raw_node_name not in self.servers:
-            return await self._error(w, Errortypes.INVALID_SUBSCRIBE)
+            self.servers[raw_node_name] = Connection(
+                raw_node_name,
+                {},
+                None,
+                None
+            )
 
         if raw_field_name not in self.servers[raw_node_name].fields:
             self.servers[raw_node_name].fields[raw_field_name] = Field(
@@ -865,15 +884,27 @@ class AsyncDistributedServer(SockServer):
     async def _handle_send_auth(self, data, CREDENTIALS, w, writer):
         CREDENTIALS = data[1:]
 
-        if CREDENTIALS in self.servers:
+        ## old logic: fails with superserver behaviour
+        # if CREDENTIALS in self.servers:
+        #     return await self._error(w, Errortypes.INVALID_CREDENTIALS)
+
+        # return error only if client connections is not None
+        if CREDENTIALS in self.servers and self.servers[CREDENTIALS].socket is not None:
             return await self._error(w, Errortypes.INVALID_CREDENTIALS)
 
-        self.servers[CREDENTIALS] = Connection(
-            name=CREDENTIALS,
-            fields={},
-            socket=writer,
-            udp_addr=None,
-        )
+        # if client was disconnected, change socket and reset UDP addr
+        elif CREDENTIALS in self.servers:
+            self.servers[CREDENTIALS].socket = writer
+            self.servers[CREDENTIALS].udp_addr = None
+            
+        else:
+            self.servers[CREDENTIALS] = Connection(
+                name=CREDENTIALS,
+                fields={},
+                socket=writer,
+                udp_addr=None,
+            )
+
         
         return CREDENTIALS
     
@@ -1034,7 +1065,7 @@ class AsyncDistrubutedClient(SockClient):
 
     async def _recv(self, length: int) -> bytes:
         while self._is_receiving:
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(0.003)
             
         self._is_receiving = True
         data = await self.r.readexactly(length)
@@ -1064,6 +1095,9 @@ class AsyncDistrubutedClient(SockClient):
         #     asyncio.sleep(0.01)
 
         # self.sending = True
+        
+        if data[0] == 0x01:
+            raise Exception
 
         await self._send(length)
         await self._send(data)
@@ -1081,9 +1115,9 @@ class AsyncDistrubutedClient(SockClient):
         while True:
             data = await self.recv()
             
-            if len(data) <= 0 and self.w.transport.is_closing():
-                print("CLOSED!")
-                break
+            if len(data) <= 0:
+                await asyncio.sleep(0.05)
+                continue
             
             data, datatype = data[1:], data[0]
 
@@ -1210,6 +1244,7 @@ class AsyncDistrubutedClient(SockClient):
                         raise Exception
 
             except Exception as e:
+                logging.exception(e)
                 await self.send(bytes([Datatypes.ERROR.value, Errortypes.METHOD_NOT_FOUND.value]))
 
     async def _udp_mainloop(self):
