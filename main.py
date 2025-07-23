@@ -345,7 +345,9 @@ setup(
                         await robot_client.anon(
                             forwarder["to_node"],
                             forwarder["to_field"],
-                            data
+                            data,
+                            
+                            force_to_tcp=True, # TODO: fix udp
                         )
 
                     server_client.fields.append(
@@ -359,8 +361,12 @@ setup(
                         await server_client.anon(
                             forwarder["to_node"],
                             forwarder["to_field"],
-                            data
+                            data,
+                            
+                            force_to_tcp=True, # TODO: fix udp
                         )
+                        
+                        print(f"Sending to server client: {forwarder['to_node']}:{forwarder['to_field']}")
 
                     robot_client.fields.append(
                         (forwarder['from_node'], forwarder['from_field'], _forward)

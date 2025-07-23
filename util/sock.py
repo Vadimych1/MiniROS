@@ -697,6 +697,7 @@ class AsyncDistributedServer(SockServer):
             logging.error(f'Line: {e.__traceback__.tb_lineno}')
 
         finally:
+            print(f"Cleaning: {CREDENTIALS}")
             await self._cleanup(CREDENTIALS)
                         
 
@@ -763,6 +764,7 @@ class AsyncDistributedServer(SockServer):
         raw_field_name = data[2+name_length:2+name_length+field_length]
 
         if raw_node_name not in self.servers or self.servers[raw_node_name].socket is None:
+            logging.error(f"Failed to send ANON to {raw_field_name}: node {raw_node_name} is not connected ({raw_node_name in self.servers})")
             return await self._error(w, Errortypes.INVALID_ANON_CREDENTIALS)
 
         await self.tcp_send(self.servers[raw_node_name].socket, bytes([
