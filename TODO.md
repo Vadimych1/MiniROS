@@ -1,5 +1,6 @@
 # TODO
 - add docstrings support
+- sock.py line 866: add None value handling
 
 # DONE
 - add support for non-existant-topic subcribe (automatic subscribe when topic is created) 

@@ -860,7 +860,7 @@ class AsyncDistributedServer(SockServer):
 
 
     async def _handle_get_udp_auth(self, data, CREDENTIALS, w):
-        if data not in self.servers: # data = raw_node_name
+        if data not in self.servers or self.servers[data].udp_addr is None: # data = raw_node_name
             return await self._error(w, Errortypes.INVALID_GET_UDP_CREDENTIALS, data)
 
         ip, port = self.servers[data].udp_addr # data = raw_node_name
