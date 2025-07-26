@@ -591,12 +591,13 @@ class AsyncDistributedServer(SockServer):
         try:
             length = await self._tcp_recv(sock, 4)
             length = struct.unpack(">I", length)[0]
-            return zlib.decompress(await self._tcp_recv(sock, length))        
+            data = zlib.decompress(await self._tcp_recv(sock, length))        
+            return data
         except:
             return bytes([])
 
 
-    async def tcp_send(self, sock, data):
+    async def tcp_send(self, sock, data):        
         data = zlib.compress(data)
         length = len(data)
         length = struct.pack(">I", length)
@@ -763,6 +764,8 @@ class AsyncDistributedServer(SockServer):
         raw_node_name = data[2:2+name_length]
         raw_field_name = data[2+name_length:2+name_length+field_length]
 
+        print(CREDENTIALS, "sended anon to", raw_node_name, raw_field_name)
+
         if raw_node_name not in self.servers or self.servers[raw_node_name].socket is None:
             logging.error(f"Failed to send ANON to {raw_field_name}: node {raw_node_name} is not connected ({raw_node_name in self.servers})")
             return await self._error(w, Errortypes.INVALID_ANON_CREDENTIALS)
@@ -781,8 +784,11 @@ class AsyncDistributedServer(SockServer):
         name_length = data[0]
         field_length = data[1]
         
+        
         raw_node_name = data[2:2+name_length]
         raw_field_name = data[2+name_length:2+name_length+field_length]
+
+        print(CREDENTIALS, "subscribed to", raw_node_name, raw_field_name)
 
         ## old logic: fails when superserver is used (superserver connects before other nodes)
         # if raw_node_name not in self.servers:
@@ -813,6 +819,8 @@ class AsyncDistributedServer(SockServer):
         data_start = 1+field_length
 
         raw_field_name = data[1:data_start]
+
+        print(CREDENTIALS, "posted to", raw_field_name)
 
         if raw_field_name not in self.servers[CREDENTIALS].fields:
             self.servers[CREDENTIALS].fields[raw_field_name] = Field(
@@ -885,6 +893,8 @@ class AsyncDistributedServer(SockServer):
     
     async def _handle_send_auth(self, data, CREDENTIALS, w, writer):
         CREDENTIALS = data[1:]
+
+        print("Connected:", CREDENTIALS)
 
         ## old logic: fails with superserver behaviour
         # if CREDENTIALS in self.servers:
