@@ -339,38 +339,47 @@ setup(
                 robot_client = OnRobotClient(name, _parse_handlers=False, ip=lip, port=lport)
                 server_client = OnServerClient(name, _parse_handlers=False, ip=rip, port=rport)
 
-                for forwarder in cfg["on_robot"]:
-                    async def _forward(data):
-                        await robot_client.wait(False)
-                        await robot_client.anon(
-                            forwarder["to_node"],
-                            forwarder["to_field"],
-                            data,
-                            
-                            force_to_tcp=True, # TODO: fix udp
-                        )
-
-                    server_client.fields.append(
-                        (forwarder['from_node'], forwarder['from_field'], _forward)
-                    )
-
-
                 for forwarder in cfg["on_server"]:
-                    async def _forward(data):
-                        await server_client.wait(False)
-                        await server_client.anon(
-                            forwarder["to_node"],
-                            forwarder["to_field"],
-                            data,
-                            
-                            force_to_tcp=True, # TODO: fix udp
-                        )
+                    def h():
+                        _forwarder = forwarder.copy()
                         
-                        print(f"Sending to server client: {forwarder['to_node']}:{forwarder['to_field']}")
+                        async def _forward(data):
+                            print(_forwarder, "ON_SERVER")
+                            
+                            await server_client.wait(False)
+                            await server_client.anon(
+                                _forwarder["to_node"],
+                                _forwarder["to_field"],
+                                data,
+                                
+                                force_to_tcp=True, # TODO: fix udp
+                            )
 
-                    robot_client.fields.append(
-                        (forwarder['from_node'], forwarder['from_field'], _forward)
-                    )
+                        robot_client.fields.append(
+                            (_forwarder['from_node'], _forwarder['from_field'], _forward)
+                        )
+                    h()
+
+                for forwarder in cfg["on_robot"]:
+                    def h():
+                        _forwarder = forwarder.copy()
+                        
+                        async def _forward(data):
+                            print(_forwarder, "ON_ROBOT")
+                            
+                            await robot_client.wait(False)
+                            await robot_client.anon(
+                                _forwarder["to_node"],
+                                _forwarder["to_field"],
+                                data,
+                                
+                                force_to_tcp=True, # TODO: fix udp
+                            )
+
+                        server_client.fields.append(
+                            (_forwarder['from_node'], _forwarder['from_field'], _forward)
+                        )
+                    h()
 
                 s = AsyncDistributedServer(host, port)
 
