@@ -579,7 +579,8 @@ class AsyncDistributedServer(SockServer):
 
 
     async def _tcp_recv(self, sock: asyncio.StreamReader, length: int, addr: None = None):
-        return await sock.readexactly(length)
+        data = await sock.readexactly(length)
+        return data
 
     
     async def _tcp_send(self, sock: asyncio.StreamWriter, data: bytes, addr: None = None):
@@ -591,7 +592,8 @@ class AsyncDistributedServer(SockServer):
         try:
             length = await self._tcp_recv(sock, 4)
             length = struct.unpack(">I", length)[0]
-            return zlib.decompress(await self._tcp_recv(sock, length))        
+            data = zlib.decompress(await self._tcp_recv(sock, length))        
+            return data
         except:
             return bytes([])
 
@@ -885,11 +887,14 @@ class AsyncDistributedServer(SockServer):
     
     async def _handle_send_auth(self, data, CREDENTIALS, w, writer):
         CREDENTIALS = data[1:]
+        
+        print(f"Connected:", CREDENTIALS)
 
         ## old logic: fails with superserver behaviour
         # if CREDENTIALS in self.servers:
         #     return await self._error(w, Errortypes.INVALID_CREDENTIALS)
 
+        # new:
         # return error only if client connections is not None
         if CREDENTIALS in self.servers and self.servers[CREDENTIALS].socket is not None:
             return await self._error(w, Errortypes.INVALID_CREDENTIALS)
@@ -906,7 +911,6 @@ class AsyncDistributedServer(SockServer):
                 socket=writer,
                 udp_addr=None,
             )
-
         
         return CREDENTIALS
     
@@ -1085,7 +1089,7 @@ class AsyncDistrubutedClient(SockClient):
             length = struct.unpack(">I", length)[0]
             return zlib.decompress(await self._recv(length))
         except Exception as e:
-            print(e)
+            logging.exception(e)
             return bytes([])
         
     async def send(self, data):
@@ -1129,15 +1133,15 @@ class AsyncDistrubutedClient(SockClient):
                         logging.debug("GOT REQUEST_AUTH")
 
                         CREDENTIALS = self.name.encode()
-
+                        
                         await self.send(bytes([
                             Datatypes.SEND_AUTH.value,
                             len(CREDENTIALS),
                             *CREDENTIALS
                         ]))
-
+                        
                         ip, port = self.transport.get_extra_info("sockname")[:2]
-
+                        
                         await self.send(bytes([
                             Datatypes.SEND_UDP_AUTH.value,
                             *ip.encode(),
