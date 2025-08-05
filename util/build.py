@@ -2,12 +2,16 @@ import shutil, subprocess, os, argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--version", "-v", type=str, default="1.0.2b0")
+parser.add_argument("--pyexec", "-e", type=str, default="python3")
 pd = parser.parse_args()
 
 VERSION = pd.version
 
-if os.path.exists("build"):
-    shutil.rmtree("build")
+try:
+    if os.path.exists("build"):
+        shutil.rmtree("build")
+except:
+    pass
 
 shutil.copytree("util", "build/miniros/util")
 shutil.copytree("base", "build/miniros/base")
@@ -44,5 +48,5 @@ os.chdir("build")
 try: shutil.rmtree("./dist", True) # remove prev dists
 except: pass
 
-os.system(f"python3 setup.py sdist")
-os.system(f"python3 -m pip install dist/{os.listdir('dist')[0]} --force --break-system-packages")
+os.system(f"{pd.pyexec} setup.py sdist")
+os.system(f"{pd.pyexec} -m pip install dist/{os.listdir('dist')[0]} --force --break-system-packages")

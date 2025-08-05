@@ -28,7 +28,7 @@ create_parser.add_argument("--description", type=str, default="todo")
 create_parser.add_argument("--authors", type=list, nargs="+")
 create_parser.add_argument("--requires", type=list, nargs="+")
 create_parser.add_argument("--entrypoint", type=str, default="main.py")
-create_parser.add_argument("--otherexts", type=list, nargs="+", help="bash commands to install other extensions")
+create_parser.add_argument("--pypackages", type=list, nargs="+", help="Python packages")
 
 delete_parser.add_argument("name", type=str)
 
@@ -44,13 +44,13 @@ if parsed.version:
     print()
     print(f"MiniROS {VERSION}")
     print()
-    print(r"    __  ____       _ ____            ")
-    print(r"   /  |/  /_____  / / __ \____  _____")
-    print(r"  / /|_/ / / __ \/ / /_/ / __ \/ ___/")
-    print(r" / /  / / / / / / / _, _/ /_/ (__  ) ")
-    print(r"/_/  /_/_/_/ /_/_/_/ |_|\____/____/  ")                                    
+    print(r"\033[1;36m    __  ____       _ ____            ")
+    print(r"\033[1;36m   /  |/  /_____  / / __ \____  _____")
+    print(r"\033[1;36m  / /|_/ / / __ \/ / /_/ / __ \/ ___/")
+    print(r"\033[1;36m / /  / / / / / / / _, _/ /_/ (__  ) ")
+    print(r"\033[1;36m/_/  /_/_/_/ /_/_/_/ |_|\____/____/  ")                                    
     print()
-    print(f"by Vadimych1 (https://github.com/Vadimych1)")
+    print("\033[0;36mby Vadimych1 (https://github.com/Vadimych1)\033[0m")
     print()
     quit(0)
 
@@ -86,7 +86,7 @@ match parsed.subparser_name:
         trace(pkg, path)
 
         if not os.path.exists(path):
-            parser.error(f"Package '{pkg}' is not exists")
+            parser.error(f"package '{pkg}' does not exist")
             quit(1)
 
         doc = xml.parse(os.path.join(path, "package.xml"))
@@ -94,7 +94,7 @@ match parsed.subparser_name:
         pkg_name = doc.getElementsByTagName("name")[0].childNodes[0].nodeValue
 
         if pkg != pkg_name:
-            parser.error(f"Package '{pkg}' has invalid XML implementation")
+            parser.error(f"package '{pkg}' has invalid XML implementation")
             quit(1)
 
         entrypoint = doc.getElementsByTagName("entrypoint")[0].childNodes[0].nodeValue
@@ -113,7 +113,7 @@ match parsed.subparser_name:
         authors = parsed.authors
         requires = parsed.requires
         entrypoint = parsed.entrypoint
-        otherexts = parsed.otherexts
+        otherexts = parsed.pypackages
 
         trace(pkg, maintainer, description, authors, requires, entrypoint)
 
@@ -214,10 +214,10 @@ from source.datatypes import *
             authors_e.appendChild(author_e)
         root.appendChild(authors_e)
 
-        otherexts_e = xml.Element("otherexts")
+        otherexts_e = xml.Element("python-packages")
         otherexts_e.ownerDocument = doc
         for ext in (otherexts if otherexts is not None else []):
-            ext_e = xml.Element("ext")
+            ext_e = xml.Element("pp")
             ext_e.ownerDocument = doc
             ext_text = xml.Text()
             ext_text.replaceWholeText("".join(ext))
@@ -225,10 +225,32 @@ from source.datatypes import *
             otherexts_e.appendChild(ext_e)
         root.appendChild(otherexts_e)
 
+        linux_scripts_e = xml.Element("linux-scripts")
+        linux_scripts_e.ownerDocument = doc
+        
+        linux_script_e = xml.Element("lscript")
+        linux_scripts_e.ownerDocument = doc
+        linux_script_text = xml.Text()
+        linux_script_text.replaceWholeText("echo Done!")
+        
+        linux_scripts_e.appendChild(linux_script_e)
+        root.appendChild(linux_scripts_e)
+        
+        windows_scripts_e = xml.Element("windows-scripts")
+        windows_scripts_e.ownerDocument = doc
+        
+        windows_script_e = xml.Element("wscript")
+        windows_scripts_e.ownerDocument = doc
+        windows_script_text = xml.Text()
+        windows_script_text.replaceWholeText("echo Done!")
+        
+        windows_scripts_e.appendChild(windows_script_e)
+        root.appendChild(windows_scripts_e)
+
         with open("package.xml", "w") as f:
             f.write(doc.toprettyxml())
 
-        print(f"Successfully created new package '{pkg}'")
+        print(f"\033[1;32mSuccessfully created new package '{pkg}'\033[0m")
 
         quit(0)
 
@@ -247,13 +269,13 @@ from source.datatypes import *
 
     case "install":
         if not os.path.exists("package.xml"):
-            parser.error("there is no package in CWD")
+            parser.error("there is no package in current directory")
 
         doc = xml.parse("package.xml").getElementsByTagName("package")[0]
         name = doc.getElementsByTagName("name")[0].childNodes[0].nodeValue
         pkg_dir = get_package_dir(name.replace("-", "_").replace(" ", "_"))
 
-        otherexts = map(lambda x: x.childNodes[0].nodeValue, doc.getElementsByTagName("ext"))
+        otherexts = map(lambda x: x.childNodes[0].nodeValue, doc.getElementsByTagName("pp"))
 
         trace(name, pkg_dir)
 
@@ -261,7 +283,9 @@ from source.datatypes import *
             os.makedirs(pkg_dir)
 
         # build
-        shutil.rmtree("build")
+        if os.path.exists("build"):
+            shutil.rmtree("build")
+            
         shutil.copytree("src", f"build/miniros_{name.replace('-', '_').replace(' ', '_')}")
         
         if not os.path.exists("build/__init__.py"):
@@ -294,10 +318,26 @@ setup(
         os.system(f"{PYTHON_EXEC} -m pip install dist/{os.listdir('dist')[0]} --force --break-system-packages")
         os.system("cd ../../")
 
-        print("Installing other specified extensions")
+        print("Installing specified python packages")
         for x in otherexts:
+            try:
+                os.system(f"{PYTHON_EXEC} -m pip install {x}")
+            except Exception as e:
+                print(f"\033[1;31mFailed to install Python package {x}:", e, "\033[0m")
+                
+        print("Running platform-specific scripts")
+        
+        sys = platform.system()
+        if sys == "Windows":
+            scripts = map(lambda x: x.childNodes[0].nodeValue, doc.getElementsByTagName("wscript"))
+        elif sys == "Linux":
+            scripts = map(lambda x: x.childNodes[0].nodeValue, doc.getElementsByTagName("lscript"))
+        else:
+            scripts = []
+                
+        for x in scripts:
             os.system(x)
-
+                
         print(f"Successfully installed package '{name}'")
 
         quit(0)
@@ -310,7 +350,7 @@ setup(
 
         trace(host, port)
 
-        print(f"Running at {host}:{port}")
+        print(f"\033[1mRunning at {host}:{port}\033[0m")
 
         if len(parsed.superserver.strip()) > 0:
             from miniros import AsyncROSClient
@@ -323,10 +363,6 @@ setup(
 
                 lip, lport = cfg["local_ip"], cfg["local_port"]
                 rip, rport = cfg["remote_ip"], cfg["remote_port"]
-                
-                print("\nSuperserver configuration:")
-                print(f"LOCAL:{lip}:{lport}")
-                print(f"REMOTE:{rip}:{rport}\n")
 
                 name = cfg["robot_name"]
 
@@ -344,8 +380,6 @@ setup(
                         _forwarder = forwarder.copy()
                         
                         async def _forward(data):
-                            print(_forwarder, "ON_SERVER")
-                            
                             await server_client.wait(False)
                             await server_client.anon(
                                 _forwarder["to_node"],
@@ -365,8 +399,6 @@ setup(
                         _forwarder = forwarder.copy()
                         
                         async def _forward(data):
-                            print(_forwarder, "ON_ROBOT")
-                            
                             await robot_client.wait(False)
                             await robot_client.anon(
                                 _forwarder["to_node"],

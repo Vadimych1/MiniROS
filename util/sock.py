@@ -561,7 +561,7 @@ class AsyncDistributedServer(SockServer):
     def __init__(self, ip: str, port: int):
 
         self.sock = None
-        self.running = False
+        self.running = asyncio.Event()
         
         super().__init__(ip, port)
 
@@ -569,13 +569,12 @@ class AsyncDistributedServer(SockServer):
     async def run(self) -> None:
         self.sock: asyncio.Server = await asyncio.start_server(self.tcp_handler, self.ip, self.port)
 
-        self.running = True
+        self.running.set()
         await self.sock.serve_forever()
 
 
     async def wait(self) -> None:
-        while not self.running:
-            await asyncio.sleep(0.05)
+        await self.running.wait()
 
 
     async def _tcp_recv(self, sock: asyncio.StreamReader, length: int, addr: None = None):
@@ -960,7 +959,7 @@ class AsyncDistrubutedClient(SockClient):
 
         self.transport: _ClientRecvProtocol = None
 
-        self._is_running = False
+        self._is_running = asyncio.Event()
         
         self._is_receiving = False
 
@@ -1333,7 +1332,7 @@ class AsyncDistrubutedClient(SockClient):
 
         self.transport = transport
 
-        self._is_running = True
+        self._is_running.set()
 
         await asyncio.gather(
             self._tcp_mainloop(),
