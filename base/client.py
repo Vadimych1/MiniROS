@@ -1,6 +1,5 @@
 from miniros.util.sock import TCPSockClient as SockClient
 from miniros.util.sock import AsyncDistrubutedClient as AsyncSockClient
-import asyncio
 import threading
 from miniros.util.datatypes import Datatype
 from miniros.util.decorators import decorators
@@ -106,10 +105,11 @@ class AsyncROSClient(ROSClient):
         """
 
         await self.client._is_running.wait()
+        await self.client._is_sended_credentials.wait()
 
-        # may be deprecated
-        while self.client.w is None or self.client.r is None:
-            await asyncio.sleep(0.1)
+        ## deprecated
+        # while self.client.w is None or self.client.r is None:
+        #     await asyncio.sleep(0.1)
 
         if sub_when_activated:
             await self.sub()

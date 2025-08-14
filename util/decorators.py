@@ -6,7 +6,14 @@ class decorators:
         def wwrapper(func):
             def wrapper(*args, **kwargs):
                 args = list(args)
-                args[arg] = datatype.decode(args[arg])
+                
+                try:
+                    args[arg] = datatype.decode(args[arg])
+                
+                except Exception as e:
+                    print("Exception occured while decoding:", e)
+                    return None
+                    
                 return func(*args, **kwargs)
             
             return wrapper
@@ -18,8 +25,16 @@ class decorators:
         def wwrapper(func):
             async def wrapper(*args, **kwargs):
                 args = list(args)
-                args[arg] = datatype.decode(args[arg])
+                
+                try:
+                    args[arg] = datatype.decode(args[arg])
+
+                except Exception as e:
+                    print("Exception occured while decoding:", e)
+                    return None
+
                 return await func(*args, **kwargs)
+                    
             return wrapper
         return wwrapper
 

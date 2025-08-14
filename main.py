@@ -372,8 +372,8 @@ setup(
                 class OnServerClient(AsyncROSClient):
                     ...
 
-                robot_client = OnRobotClient(name, _parse_handlers=False, ip=lip, port=lport)
-                server_client = OnServerClient(name, _parse_handlers=False, ip=rip, port=rport)
+                robot_client = OnRobotClient('l_' + name, _parse_handlers=False, ip=lip, port=lport)
+                server_client = OnServerClient('r_' + name, _parse_handlers=False, ip=rip, port=rport)
 
                 for forwarder in cfg["on_server"]:
                     def h():

@@ -655,35 +655,35 @@ class AsyncDistributedServer(SockServer):
                             CREDENTIALS = await self._handle_send_auth(data, CREDENTIALS, w, writer)
 
                         case Datatypes.SEND_UDP_AUTH:
-                            await self._check(CREDENTIALS)
+                            await self._check(CREDENTIALS, "SEND_UDP_AUTH")
                             await self._handle_send_udp_auth(data, CREDENTIALS, w)
 
                         case Datatypes.GET_UDP_AUTH:
-                            await self._check(CREDENTIALS)
+                            await self._check(CREDENTIALS, "GET_UDP_AUTH")
                             await self._handle_get_udp_auth(data, CREDENTIALS, w)
 
                         case Datatypes.GET:
-                            await self._check(CREDENTIALS)
+                            await self._check(CREDENTIALS, "GET")
                             await self._handle_get(data, CREDENTIALS, w)
 
                         case Datatypes.POST:
-                            await self._check(CREDENTIALS)
+                            await self._check(CREDENTIALS, str(data) + " | POST")
                             await self._handle_post(data, CREDENTIALS, w)
 
                         case Datatypes.SUBSCRIBE:
-                            await self._check(CREDENTIALS)
+                            await self._check(CREDENTIALS, "SUBSCRIBE")
                             await self._handle_subscribe(data, CREDENTIALS, w)
 
                         case Datatypes.ANON:
-                            await self._check(CREDENTIALS)
+                            await self._check(CREDENTIALS, "ANON")
                             await self._handle_anon(data, CREDENTIALS, w)
 
                         case Datatypes.ROSSTAT:
-                            await self._check(CREDENTIALS)
+                            await self._check(CREDENTIALS, "ROSSTAT")
                             await self._handle_rosstat(w)
 
                         case Datatypes.ERROR:
-                            await self._check(CREDENTIALS)
+                            await self._check(CREDENTIALS, "ERROR")
                             await self._handle_error(data)
                             
                         case _:
@@ -716,9 +716,9 @@ class AsyncDistributedServer(SockServer):
             self.servers[CREDENTIALS].socket = None 
                 
                     
-    async def _check(self, CREDENTIALS):
+    async def _check(self, CREDENTIALS: bytes, additional: str | None = None):
         if CREDENTIALS is None: 
-            raise ConnectionError("node hasn`t sended valid credentials")
+            raise ConnectionError(f"node hasn`t sended valid credentials {('(' + str(additional) + ')') if additional is not None else ''}")
 
     
     async def _error(self, w, error: Errortypes, data: bytes = bytes([])):
@@ -960,7 +960,7 @@ class AsyncDistrubutedClient(SockClient):
         self.transport: _ClientRecvProtocol = None
 
         self._is_running = asyncio.Event()
-        
+        self._is_sended_credentials = asyncio.Event()
         self._is_receiving = False
 
 
@@ -1155,6 +1155,8 @@ class AsyncDistrubutedClient(SockClient):
                             *ip.encode(),
                             *struct.pack(">H", int(port)),
                         ]))
+                        
+                        self._is_sended_credentials.set()
 
                     case Datatypes.SEND_UDP_AUTH:
                         logging.debug("GOT SEND_UDP_AUTH")

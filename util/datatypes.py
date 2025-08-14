@@ -260,3 +260,28 @@ class Movement(Dict):
             d["pos"],
             d["ang"]
         )
+
+class LidarDatatype(NumpyArray):
+    def __init__(self, distances: list[int] | np.ndarray[np.uint], angles: list[int] | np.ndarray[np.uint]): 
+        self.distances = np.asarray(distances)
+        self.angles = np.asarray(angles)
+
+    @staticmethod
+    def encode(data: "LidarDatatype"):
+        data = np.asarray(
+            [
+                *data.distances,
+                *data.angles
+            ]
+        )
+        
+        return NumpyArray.encode(data)
+    
+    @staticmethod
+    def decode(data: "LidarDatatype"):
+        data = NumpyArray.decode(data)
+
+        return LidarDatatype(
+            data[:int(data.shape[0] / 2)],
+            data[int(data.shape[0] / 2):],
+        )
