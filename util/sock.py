@@ -11,6 +11,7 @@ import asyncio
 import random
 import traceback
 
+
 AddrLike = str | tuple[str, int]
 
 
@@ -104,7 +105,7 @@ class Connection:
     def to_json(self):
         return {
             "name": self.name.decode(),
-            "fields": list(map(lambda x: x.to_json(), self.fields.values())),
+            "fields": list(map(Field.to_json, self.fields.values())),
         }
 
 class SockServer:
@@ -889,25 +890,14 @@ class AsyncDistributedServer(SockServer):
         port = struct.unpack(">H", data[-2:])[0]
 
         self.servers[CREDENTIALS].udp_addr = (ip, port)
-    
+
     
     async def _handle_send_auth(self, data, CREDENTIALS, w, writer):
         CREDENTIALS = data[1:]
-        
-        print(f"Connected:", CREDENTIALS)
 
-        print("Connected:", CREDENTIALS)
-
-        ## old logic: fails with superserver behaviour
-        # if CREDENTIALS in self.servers:
-        #     return await self._error(w, Errortypes.INVALID_CREDENTIALS)
-
-        # new:
-        # return error only if client connections is not None
         if CREDENTIALS in self.servers and self.servers[CREDENTIALS].socket is not None:
             return await self._error(w, Errortypes.INVALID_CREDENTIALS)
 
-        # if client was disconnected, change socket and reset UDP addr
         elif CREDENTIALS in self.servers:
             self.servers[CREDENTIALS].socket = writer
             self.servers[CREDENTIALS].udp_addr = None
@@ -978,8 +968,6 @@ class AsyncDistrubutedClient(SockClient):
                 self.handlers[node] = {}
 
             self.handlers[node][field] = handler
-
-            logging.debug(f"ADDED HANDLER {node}:{field}")
 
     async def unsubscribe(self, node: str, field: str) -> None:
         await self.send(bytes([
@@ -1104,19 +1092,12 @@ class AsyncDistrubutedClient(SockClient):
         data = zlib.compress(data)
         length = len(data)
         length = struct.pack(">I", length)
-
-        # while self.sending:
-        #     asyncio.sleep(0.01)
-
-        # self.sending = True
         
         if data[0] == 0x01:
             raise Exception
 
         await self._send(length)
         await self._send(data)
-        
-        # self.sending = Fals   e
 
 
     async def send_udp(self, data: bytes, addr: AddrLike):
@@ -1194,7 +1175,9 @@ class AsyncDistrubutedClient(SockClient):
 
                         self.received[node_name][field_name] = data[data_start:]
                         if node_name in self.handlers and field_name in self.handlers[node_name]:
-                            await self.handlers[node_name][field_name](data[data_start:])
+                            result = await self.handlers[node_name][field_name](data[data_start:])
+                            if result is not None:
+                                print(f"[{self.name}] {node_name}:{field_name}: {result}")
 
                     case Datatypes.SEND_POST:
                         logging.debug("GOT SEND_POST")
@@ -1251,7 +1234,10 @@ class AsyncDistrubutedClient(SockClient):
                         node_name = data[2:2+name_length].decode()
                         field_name = data[2+name_length:2+name_length+field_length].decode()
 
-                        await self.anon_handlers[field_name](data[data_start:], node_name)
+                        if field_name in self.anon_handlers:
+                            result = await self.anon_handlers[field_name](data[data_start:], node_name)
+                            if result is not None:
+                                print(f"[{self.name}] anon:{field_name}: {result}")
 
                     case Datatypes.ROSSTAT:
                         self.on_rosstat(json.loads(data.decode()))

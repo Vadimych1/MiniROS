@@ -74,7 +74,7 @@ class LidarSensor(Sensor):
         self.attributes = {
             "measures_per_scan": 360,
             "scan_angle": 360, # degrees
-            "scan_distance": 12, # meters
+            "scan_distance": 24, # meters
         }
     
     def measure(self) -> datatypes.LidarDatatype:
@@ -95,7 +95,8 @@ class LidarSensor(Sensor):
         angle_per_scan = self.attributes["scan_angle"] / self.attributes["measures_per_scan"]
 
         angles = []
-        offset = np.random.random() / 10 # for more realistic values
+        # offset = np.random.random() / 10 # for more realistic values
+        offset = 0
         
         for r in range(self.attributes["measures_per_scan"]):
             r = np.deg2rad(r * angle_per_scan) + offset
