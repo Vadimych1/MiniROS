@@ -1,6 +1,5 @@
 from miniros.util.sock import TCPSockClient as SockClient
 from miniros.util.sock import AsyncDistrubutedClient as AsyncSockClient
-import asyncio
 import threading
 from miniros.util.datatypes import Datatype
 from miniros.util.decorators import decorators
@@ -30,27 +29,29 @@ class AsyncTopic:
         await self.post_func(self.field, self.encoder.encode(data))
 
 class ROSClient:
-    def __init__(self, name: str, ip: str = "localhost", port: int = 3000):
+    def __init__(self, name: str, ip: str = "localhost", port: int = 3000, _sub=False):
         self.name = name
         self.ip = ip
         self.port = port
 
-        self.client = SockClient(ip, port, name)
-        self.run_thread = None
-        
         self.fields = []
 
-        for c in self.__class__.__dict__:
-            if c.startswith("on_"):
-                data = c.split("_")[1:]
+        if not _sub:
+            self.client = SockClient(ip, port, name)
+        
+            for c in self.__class__.__dict__:
+                if c.startswith("on_"):
+                    data = c.split("_")[1:]
 
-                if len(data) == 2:
-                    node, field = data
-                    self.fields.append((node, field, self.__getattribute__(c)))
-                else:
-                    field = data[0]
-                    self.client.anon_handlers[field] = self.__getattribute__(c)
-
+                    if len(data) == 2:
+                        node, field = data
+                        self.fields.append((node, field, self.__getattribute__(c)))
+                    else:
+                        field = data[0]
+                        self.client.anon_handlers[field] = self.__getattribute__(c)
+        
+        self.run_thread = None
+        
     @decorators.threaded()
     def _run(self):
         self.client.mainloop()
@@ -73,14 +74,18 @@ class ROSClient:
         self.client.anon(node, field, data)
 
 class AsyncROSClient(ROSClient):
-    def __init__(self, name, ip = "localhost", port = 3000):
-        super().__init__(name, ip, port)
+    def __init__(self, name, ip = "localhost", port = 3000, _parse_handlers=True):
+        super().__init__(name, ip, port, True)
 
         self.client = AsyncSockClient(ip, port, name)
 
         self.fields = []
         self.client.anon_handlers = {}
         
+        if _parse_handlers:
+            self._parse_handlers()
+        
+    def _parse_handlers(self):
         for c in self.__class__.__dict__:
             if c.startswith("on_"):
                 data = c.split("_")[1:]
@@ -99,8 +104,12 @@ class AsyncROSClient(ROSClient):
         Can be used when running client mainloop and main code with asyncio.gather
         """
 
-        while not self.client._is_running or self.client.w is None or self.client.r is None:
-            await asyncio.sleep(0.1)
+        await self.client._is_running.wait()
+        await self.client._is_sended_credentials.wait()
+
+        ## deprecated
+        # while self.client.w is None or self.client.r is None:
+        #     await asyncio.sleep(0.1)
 
         if sub_when_activated:
             await self.sub()
@@ -120,54 +129,5 @@ class AsyncROSClient(ROSClient):
         await self.client.post(field, b"")
         return AsyncTopic(field, datatype, self.client.post)
     
-    async def anon(self, node: str, field: str, data: bytes, /, force_to_tcp: bool = False):
+    async def anon(self, node: str, field: str, data: bytes, force_to_tcp: bool = False):
         await self.client.anon(node, field, data, force_to_tcp)
-
-# if __name__ == "__main__":    
-#     class Client1(AsyncROSClient):
-#         def __init__(self, ip="localhost", port=3000):
-#             super().__init__("client1", ip, port)
-        
-#         async def on_hello(self, data, node):
-#             print(data, node)
-
-#             print("GOT GOT GOT !!!! YEEEEE")
-
-#     class Client2(AsyncROSClient):
-#         def __init__(self, ip="localhost", port=3000):
-#             super().__init__("client2", ip, port)
-
-#     if False:
-#         client = Client1()
-#         asyncio.run(client.run())
-
-#     else:
-#         from miniros.util.util import Ticker
-
-#         ticker = Ticker(0.5)
-
-#         client = Client2()
-
-#         async def main():
-#             while not client.client._is_running:
-#                 await asyncio.sleep(0.5)
-
-#             print("Sending!")
-
-#             while True:
-#                 await ticker.tick_async()
-#                 await client.anon(
-#                     "client1",
-#                     "hello",
-#                     b"Hello, world!"
-#                 )
-        
-#         async def run():
-#             await asyncio.gather(
-#                 client.run(),
-#                 main(),
-#             )  
-
-#         asyncio.run(
-#             run()
-#         )

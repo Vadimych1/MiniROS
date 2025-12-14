@@ -19,17 +19,19 @@
 ## How to create your own package:
 1. Create a new directory and CD to it. You can name it as you want, but it will be nice to use only `a-z, A-Z, 0-9, -, _`.
 2. Run command `miniros create <package_name>`. You can specify some metadata for package when creating (see `miniros create -h`) or edit it in `package.xml` file.
-3. Your codebase now in selected directory. Project structure:
+3. Your codebase is now in specified directory. 
+
+### Project structure:
 ```
 /- <package_name>
 /#/- build - project build
 /#/- src - source files
 /#/#/- source - source files
 /#/#/#/- __init__.py - don`t touch it
-/#/#/#/- datatypes.py - specify you datatypes here
+/#/#/#/- datatypes.py - specify your datatypes here
 /#/#/- __init__.py - add import * from .source.<file>
-/#/#/- main.py - code that runs when calling 'miniros run package'
-/#/- package.xml
+/#/#/- main.py - code that runs with 'miniros run <package>'
+/#/- package.xml - metadata of the project
 ```
 Write your code in `src/source` folder, use it in `src/main.py`
 
@@ -37,6 +39,6 @@ Write your code in `src/source` folder, use it in `src/main.py`
 CD to project root and run `miniros install`. Run with sudo or start with admin rules of needed.
 
 ## How to run package:
-Run `miniros run <package_name>`. Now you can run only installed packages. Not installed packages (source code) can be run with Python.
+Run `miniros run <package_name>`. You can run only installed packages. Non-installed packages (source code) can be run via plain Python.
 
 ### See more at [docs](/docs)

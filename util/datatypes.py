@@ -4,6 +4,7 @@ import cv2 as cv
 from enum import Enum
 import struct
 
+
 class Datatype:
     """
     Base interface for encoding and decoding data
@@ -16,7 +17,7 @@ class Datatype:
         """
         Decode bytesarray (or bytesarray-like) to Python object.
 
-        :param data: Data to decode 
+        :param data: Data to decode
         :type data: bytearray
 
         :return: Decoded data
@@ -39,54 +40,63 @@ class Datatype:
 
         raise NotImplementedError
 
+
 class NumpyArrayType(Enum):
     INT8 = 0x00
     INT16 = 0x01
-    
+
     UINT8 = 0x02
     UINT16 = 0x03
 
     FLOAT16 = 0x04
     FLOAT32 = 0x05
     FLOAT64 = 0x06
+
+
 _arr_type_to_numpy = {
-    NumpyArrayType.INT8: np.dtype('uint8'),
-    NumpyArrayType.INT16: np.dtype('int16'),
-
-    NumpyArrayType.UINT8: np.dtype('uint8'),
-    NumpyArrayType.UINT16: np.dtype('uint16'),
-
-    NumpyArrayType.FLOAT16: np.dtype('float16'),
-    NumpyArrayType.FLOAT32: np.dtype('float32'),
-    NumpyArrayType.FLOAT64: np.dtype('float64'),
+    NumpyArrayType.INT8: np.dtype("uint8"),
+    NumpyArrayType.INT16: np.dtype("int16"),
+    NumpyArrayType.UINT8: np.dtype("uint8"),
+    NumpyArrayType.UINT16: np.dtype("uint16"),
+    NumpyArrayType.FLOAT16: np.dtype("float16"),
+    NumpyArrayType.FLOAT32: np.dtype("float32"),
+    NumpyArrayType.FLOAT64: np.dtype("float64"),
 }
 _numpy_to_arr_type = {val: key for key, val in _arr_type_to_numpy.items()}
+
 
 class NumpyArray(Datatype):
     @staticmethod
     def decode(data: bytearray):
         datatype = NumpyArrayType(data[0])
-        dtype =  _arr_type_to_numpy[datatype]
+        dtype = _arr_type_to_numpy[datatype]
         b = np.frombuffer(data[1:], dtype)
 
         return b
-    
+
     @staticmethod
     def encode(data: np.ndarray):
         encoded = data.tobytes()
         datatype = _numpy_to_arr_type[data.dtype]
         return bytearray([datatype.value]) + encoded
 
+
 OpenCV_IMDECODE = int
+
+
 class OpenCVImageType(Enum):
     RGB = 0x00
     GRAYSCALE = 0x01
     BGR = 0x02
+
+
 _img_type_to_cv = {
     OpenCVImageType.RGB: cv.IMREAD_COLOR,
     OpenCVImageType.GRAYSCALE: cv.IMREAD_GRAYSCALE,
     OpenCVImageType.BGR: cv.IMREAD_COLOR,
 }
+
+
 # _cv_to_img_type = {value: key for key, value in _img_type_to_cv.items()} # uncomment if needed
 class OpenCVImage(NumpyArray):
     @staticmethod
@@ -94,21 +104,23 @@ class OpenCVImage(NumpyArray):
         datatype = OpenCVImageType(data[0])
         arr = NumpyArray.decode(data[1:])
         return cv.imdecode(arr, _img_type_to_cv[datatype])
-    
+
     @staticmethod
     def encode(image: "cv.Mat", datatype: OpenCVImageType) -> bytearray:
         arr = cv.imencode(".jpg", image)[1]
         return bytearray([datatype.value]) + NumpyArray.encode(arr)
 
+
 class String(Datatype):
     @staticmethod
     def encode(data: str):
         return data.encode()
-    
+
     @staticmethod
     def decode(data):
         return data.decode()
-    
+
+
 class Int(Datatype):
     @staticmethod
     def encode(data: int):
@@ -118,6 +130,7 @@ class Int(Datatype):
     def decode(data: bytearray):
         return struct.unpack(">i", data)[0]
 
+
 class UInt(Datatype):
     @staticmethod
     def encode(data: int):
@@ -126,6 +139,7 @@ class UInt(Datatype):
     @staticmethod
     def decode(data: bytearray):
         return struct.unpack(">I", data)[0]
+
 
 class Float(Datatype):
     @staticmethod
@@ -141,7 +155,7 @@ class Bytes(Datatype):
     @staticmethod
     def encode(data):
         return data
-    
+
     @staticmethod
     def decode(data):
         return data
@@ -157,38 +171,51 @@ class Vector(Datatype):
 
     def __add__(self, other: "Vector") -> "Vector":
         return Vector(self.x + other.x, self.y + other.y, self.z + other.z)
-    
+
     def __sub__(self, other: "Vector") -> "Vector":
         return Vector(self.x - other.x, self.y - other.y, self.z - other.z)
+
+    def __mul__(self, other: "Vector") -> float:
+        return self.x * other.x + self.y * other.y + self.z * other.z
     
+    def __abs__(self):
+        return self.__mul__(self) ** 0.5
+
     def __str__(self):
         return f"Vector({self.x}, {self.y}, {self.z})"
+    
+    def norm(self) -> float:
+        return (self * self) ** 0.5
 
     @staticmethod
     def encode(data: "Vector") -> bytearray:
         return struct.pack(">fff", data.x, data.y, data.z)
-    
+
     @staticmethod
     def decode(data: bytearray) -> "Vector":
         return Vector(*struct.unpack(">fff", data))
 
+
 class Dict(Datatype):
     @staticmethod
-    def encode(data: dict[str, Any], encoders: dict[type, tuple[Datatype, int]] = {
-        str: (String, 0),
-        int: (Int, 1),
-        float: (Float, 2),
-        bytes: (Bytes, 3),
-        bytearray: (Bytes, 3),
-        Vector: (Vector, 4)
-    }) -> bytearray:
+    def encode(
+        data: dict[str, Any],
+        encoders: dict[type, tuple[Datatype, int]] = {
+            str: (String, 0),
+            int: (Int, 1),
+            float: (Float, 2),
+            bytes: (Bytes, 3),
+            bytearray: (Bytes, 3),
+            Vector: (Vector, 4),
+        },
+    ) -> bytearray:
         keys = list(data.keys())
 
-        metadata = b'\x00'.join(map(str.encode, keys))
+        metadata = b"\x00".join(map(str.encode, keys))
         metadata_length = struct.pack(">I", len(metadata))
         metadata += metadata_length
 
-        encoded = b''
+        encoded = b""
         for key in keys:
             if type(data[key]) in encoders:
                 e, ind = encoders[type(data[key])]
@@ -200,25 +227,28 @@ class Dict(Datatype):
                 raise TypeError(f"encoder for type '{type(data[key])}' is not found")
 
         return encoded + metadata
-    
+
     @staticmethod
-    def decode(data: bytearray, decoders: dict[int, Datatype] = {
-        0: String,
-        1: Int,
-        2: Float,
-        3: Bytes,
-    }) -> dict[str, Any]:
+    def decode(
+        data: bytearray,
+        decoders: dict[int, Datatype] = {
+            0: String,
+            1: Int,
+            2: Float,
+            3: Bytes,
+        },
+    ) -> dict[str, Any]:
         metadata_length = struct.unpack(">I", data[-4:])[0]
-        metadata = data[-4-metadata_length:-4]
+        metadata = data[-4 - metadata_length : -4]
 
         keys = list(map(bytes.decode, metadata.split(b"\x00")))
 
         i = 0
         decoded = {}
-        while len(data[:-4-metadata_length]) > 0:
+        while len(data[: -4 - metadata_length]) > 0:
             length = struct.unpack(">I", data[:4])[0]
             ind = data[4]
-            key = data[5:5+length]
+            key = data[5 : 5 + length]
 
             if ind not in decoders:
                 raise TypeError(f"decoder for type '{ind}' is not found")
@@ -226,9 +256,10 @@ class Dict(Datatype):
             decoded[keys[i]] = decoders[ind].decode(key)
 
             i += 1
-            data = data[5+length:]
+            data = data[5 + length :]
 
         return decoded
+
 
 class Movement(Dict):
     def __init__(self, pos: Vector, ang: Vector):
@@ -239,7 +270,7 @@ class Movement(Dict):
 
     def __add__(self, other: "Movement"):
         return Movement(other.pos + self.pos, other.ang + self.ang)
-    
+
     def __sub__(self, other: "Movement"):
         return Movement(self.pos - other.pos, self.ang - other.ang)
 
@@ -247,16 +278,41 @@ class Movement(Dict):
         return f"Movement({self.pos}, {self.ang})"
 
     @staticmethod
-    def encode(data: "Movement", encoders = { Vector: (Vector, 0) }):
-        return Dict.encode({
-            "pos": data.pos,
-            "ang": data.ang,
-        }, encoders)
+    def encode(data: "Movement", encoders={Vector: (Vector, 0)}):
+        return Dict.encode(
+            {
+                "p": data.pos,
+                "a": data.ang,
+            },
+            encoders,
+        )
 
     @staticmethod
-    def decode(data, decoders = { 0: Vector }):
+    def decode(data, decoders={0: Vector}):
         d = Dict.decode(data, decoders)
-        return Movement(
-            d["pos"],
-            d["ang"]
+        return Movement(d["p"], d["a"])
+
+
+class LidarDatatype(NumpyArray):
+    def __init__(
+        self,
+        distances: list[int] | np.ndarray[np.uint],
+        angles: list[int] | np.ndarray[np.uint],
+    ):
+        self.distances = np.asarray(distances)
+        self.angles = np.asarray(angles)
+
+    @staticmethod
+    def encode(data: "LidarDatatype"):
+        data = np.asarray([*data.distances, *data.angles])
+
+        return NumpyArray.encode(data)
+
+    @staticmethod
+    def decode(data: "LidarDatatype"):
+        data = NumpyArray.decode(data)
+
+        return LidarDatatype(
+            data[: int(data.shape[0] / 2)],
+            data[int(data.shape[0] / 2) :],
         )
