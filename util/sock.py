@@ -699,7 +699,7 @@ class AsyncDistributedServer(SockServer):
             logging.error(f'Line: {e.__traceback__.tb_lineno}')
 
         finally:
-            print(f"Cleaning: {CREDENTIALS}")
+            logging.debug(f"Cleaning: {CREDENTIALS}")
             await self._cleanup(CREDENTIALS)
                         
 
@@ -765,7 +765,7 @@ class AsyncDistributedServer(SockServer):
         raw_node_name = data[2:2+name_length]
         raw_field_name = data[2+name_length:2+name_length+field_length]
 
-        print(CREDENTIALS, "sended anon to", raw_node_name, raw_field_name)
+        logging.debug(CREDENTIALS, "sended anon to", raw_node_name, raw_field_name)
 
         if raw_node_name not in self.servers or self.servers[raw_node_name].socket is None:
             logging.error(f"Failed to send ANON to {raw_field_name}: node {raw_node_name} is not connected ({raw_node_name in self.servers})")
@@ -789,7 +789,7 @@ class AsyncDistributedServer(SockServer):
         raw_node_name = data[2:2+name_length]
         raw_field_name = data[2+name_length:2+name_length+field_length]
 
-        print(CREDENTIALS, "subscribed to", raw_node_name, raw_field_name)
+        logging.debug(CREDENTIALS, "subscribed to", raw_node_name, raw_field_name)
 
         ## old logic: fails when superserver is used (superserver connects before other nodes)
         # if raw_node_name not in self.servers:
@@ -821,7 +821,7 @@ class AsyncDistributedServer(SockServer):
 
         raw_field_name = data[1:data_start]
 
-        print(CREDENTIALS, "posted to", raw_field_name)
+        logging.debug(CREDENTIALS, "posted to", raw_field_name)
 
         if raw_field_name not in self.servers[CREDENTIALS].fields:
             self.servers[CREDENTIALS].fields[raw_field_name] = Field(
@@ -1177,7 +1177,7 @@ class AsyncDistrubutedClient(SockClient):
                         if node_name in self.handlers and field_name in self.handlers[node_name]:
                             result = await self.handlers[node_name][field_name](data[data_start:])
                             if result is not None:
-                                print(f"[{self.name}] {node_name}:{field_name}: {result}")
+                                logging.debug(f"[{self.name}] {node_name}:{field_name}: {result}")
 
                     case Datatypes.SEND_POST:
                         logging.debug("GOT SEND_POST")
@@ -1237,7 +1237,7 @@ class AsyncDistrubutedClient(SockClient):
                         if field_name in self.anon_handlers:
                             result = await self.anon_handlers[field_name](data[data_start:], node_name)
                             if result is not None:
-                                print(f"[{self.name}] anon:{field_name}: {result}")
+                                logging.debug(f"[{self.name}] anon:{field_name}: {result}")
 
                     case Datatypes.ROSSTAT:
                         self.on_rosstat(json.loads(data.decode()))

@@ -34,10 +34,11 @@ setup(
     keywords=['package-system','robotics','ros'],
 )
 """)
+# TODO: remove decorators.decorators import
 with open("build/miniros/__init__.py", "w") as f:
     f.write(f"""
 from miniros.base.client import Topic, AsyncTopic, ROSClient, AsyncROSClient
-from miniros.util.decorators import decorators
+from miniros.util.decorators import decorators, parsedata, aparsedata, threaded
 import miniros.util.datatypes as datatypes
 import miniros.util.util as utils
             
@@ -50,14 +51,17 @@ open("build/miniros/base/__init__.py", "w").close()
 open("build/miniros/simulator/__init__.py", "w").close()
 shutil.copy2("README.md", "build/README.md")
 
+print("\033[1;34mInstalling requriements...\033[0m")
+subprocess.run([pd.pyexec, "-m", "pip", "install", "-r", "requirements.txt"])
+
 os.chdir("build")
 
 print("\033[1;34mRemoving previous dist\033[0m")
-try: shutil.rmtree("./dist", True) # remove prev dists
+try: shutil.rmtree("./dist", True)
 except: pass
 
 print("\033[1;34mBuilding package...\033[0m")
-subprocess.run([pd.pyexec, "setup.py", "sdist"], stdout=subprocess.DEVNULL)
+subprocess.run([pd.pyexec, "-m", "build", "--wheel"], stdout=subprocess.DEVNULL)
 
 print("\033[1;34mInstalling\033[0m")
 subprocess.run([pd.pyexec, "-m", "pip", "install", f"dist/{os.listdir('dist')[0]}", "--force", "--break-system-packages"], stdout=subprocess.DEVNULL)

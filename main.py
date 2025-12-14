@@ -144,7 +144,7 @@ match parsed.subparser_name:
             )
 
         except Exception as e:
-            print(f"\n\033[1;31m[MiniROS] Package '{pkg}' exited with error\033[0m")
+            print(f"\n\033[1;31m[MiniROS] Package '{pkg}' exited with error {e}\033[0m")
             quit(1)
 
         print(f"\n\033[1;32m[MiniROS] Package '{pkg}' exited successfully\033[0m")
@@ -334,7 +334,7 @@ from source.datatypes import *
         pkg_dir = get_package_dir(pname)
 
         otherexts = map(
-            lambda x: x.childNodes[0].nodeValue, doc.getElementsByTagName("pp")
+            lambda x: x.childNodes[0].nodeValue, doc.getElementsByTagName("package")
         )
 
         trace(name, pkg_dir)
@@ -351,9 +351,10 @@ from source.datatypes import *
         if not os.path.exists("build/__init__.py"):
             open("build/__init__.py", "w").close()
 
-        with open("build/setup.py", "w") as f:
-            f.write(
-                f"""from setuptools import setup
+        if not os.path.exists("setup.py"):
+            with open("build/setup.py", "w") as f:
+                f.write(
+                    f"""from setuptools import setup
 
 setup(
     name='miniros_{pname}',
@@ -365,11 +366,14 @@ setup(
 )
 """
             )
+        
+        else:
+            shutil.copy2("setup.py", "build/setup.py")
 
         try:
             found = False
             for x in os.listdir():
-                if "readme" in x.lower() and os.path.isfile(x):
+                if x.lower().startswith("readme.") and os.path.isfile(x):
                     shutil.copy2(x, f"build/{x}")
                     found = True
                     break
@@ -412,6 +416,7 @@ setup(
         for x in otherexts:
             try:
                 subprocess.run([PYTHON_EXEC, "-m", "pip", "install", x])
+                print(f"\033[0;34m;Installed package {x}\033[0m")
             except Exception as e:
                 print(f"\033[1;31mFailed to install Python package {x}:", e, "\033[0m")
 
@@ -431,12 +436,17 @@ setup(
         elif sys == "Linux":
             scripts = map(_get_val, doc.getElementsByTagName("lscript"))
 
-        else:  # TODO
+        else:  # TODO: support other platforms
             scripts = []
 
         for x in scripts:
-            os.system(x)
-
+            if len(x.strip()) == 0: continue
+            
+            try:
+                os.system(x + f" {PYTHON_EXEC}")
+            except:
+                print(f"\033[1;31m[MiniROS] Failed to run '{x}'\033[0m\n\n")
+                
         print(f"\033[1;32m[MiniROS] Successfully installed package '{pname}'\033[0m\n\n")
 
         quit(0)
@@ -462,6 +472,9 @@ setup(
 
                 lip, lport = cfg["local_ip"], cfg["local_port"]
                 rip, rport = cfg["remote_ip"], cfg["remote_port"]
+                
+                trace(lip, lport)
+                trace(rip, rport)
 
                 name = cfg["robot_name"]
 
@@ -487,7 +500,7 @@ setup(
                                 _forwarder["to_node"],
                                 _forwarder["to_field"],
                                 data,
-                                # force_to_tcp=True, # TODO: fix udp
+                                force_to_tcp=True, # TODO: fix udp
                             )
 
                         robot_client.fields.append(
@@ -511,7 +524,7 @@ setup(
                                 _forwarder["to_node"],
                                 _forwarder["to_field"],
                                 data,
-                                # force_to_tcp=True, # TODO: fix udp
+                                force_to_tcp=True, # TODO: fix udp
                             )
 
                         server_client.fields.append(
