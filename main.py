@@ -1,4 +1,4 @@
-VERSION = "1.1.0a"
+VERSION = "1.1.1a"
 
 import os, platformdirs, platform, subprocess
 import xml.dom.minidom as xml
@@ -76,8 +76,10 @@ if parsed.version:
     print()
     quit(0)
 
+# TODO: check how it works on windows
+# and made platform-independent solution
 if parsed.venv is not None:
-    PYTHON_EXEC = os.path.join(parsed.venv, "/Scrips/python3")
+    PYTHON_EXEC = os.path.join(parsed.venv, "/bin/python3")
 
 
 def get_package_dir(package):
@@ -90,7 +92,10 @@ def get_package_dir(package):
         return os.path.join("/var", "lib", ".miniros", package)
 
 
-def ask(prompt: str, choices=[], default=None):
+def ask(prompt: str, choices=None, default=None):
+    if choices is None:
+        choices = []
+        
     format_s = f"{prompt} {'/'.join(choices)} {f'(default: {default})' if default is not None else ''} > "
     i = input(format_s)
     while (len(i) == 0 and default is None) or i not in choices:
@@ -136,7 +141,7 @@ match parsed.subparser_name:
                 [
                     PYTHON_EXEC,
                     os.path.join(path, "src", entrypoint),
-                    *list(map("".join, parsed.args))
+                    *list(map("".join, parsed.args)),
                 ],
                 check=True,
                 stdout=subprocess.DEVNULL if parsed.no_stdout else None,
@@ -365,8 +370,8 @@ setup(
     keywords=[],
 )
 """
-            )
-        
+                )
+
         else:
             shutil.copy2("setup.py", "build/setup.py")
 
@@ -406,7 +411,7 @@ setup(
                 "install",
                 f"dist/{os.listdir('dist')[0]}",
                 "--force",
-                "--break-system-packages",
+                # "--break-system-packages",
             ],
             stdout=subprocess.DEVNULL,
         )
@@ -427,7 +432,7 @@ setup(
         def _get_val(x):
             try:
                 return x.childNodes[0].nodeValue
-            except:
+            except Exception:
                 return ""
 
         if sys == "Windows":
@@ -440,14 +445,17 @@ setup(
             scripts = []
 
         for x in scripts:
-            if len(x.strip()) == 0: continue
-            
+            if len(x.strip()) == 0:
+                continue
+
             try:
-                os.system(x + f" {PYTHON_EXEC}")
+                os.system(x.replace("PYEXEC", PYTHON_EXEC))
             except:
                 print(f"\033[1;31m[MiniROS] Failed to run '{x}'\033[0m\n\n")
-                
-        print(f"\033[1;32m[MiniROS] Successfully installed package '{pname}'\033[0m\n\n")
+
+        print(
+            f"\033[1;32m[MiniROS] Successfully installed package '{pname}'\033[0m\n\n"
+        )
 
         quit(0)
 
@@ -472,7 +480,7 @@ setup(
 
                 lip, lport = cfg["local_ip"], cfg["local_port"]
                 rip, rport = cfg["remote_ip"], cfg["remote_port"]
-                
+
                 trace(lip, lport)
                 trace(rip, rport)
 
@@ -500,7 +508,7 @@ setup(
                                 _forwarder["to_node"],
                                 _forwarder["to_field"],
                                 data,
-                                force_to_tcp=True, # TODO: fix udp
+                                force_to_tcp=True,  # TODO: fix udp
                             )
 
                         robot_client.fields.append(
@@ -524,7 +532,7 @@ setup(
                                 _forwarder["to_node"],
                                 _forwarder["to_field"],
                                 data,
-                                force_to_tcp=True, # TODO: fix udp
+                                force_to_tcp=True,  # TODO: fix udp
                             )
 
                         server_client.fields.append(
