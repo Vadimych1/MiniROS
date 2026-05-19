@@ -1,64 +1,11 @@
 VERSION = "1.1.1a"
 
-import os, platformdirs, platform, subprocess
+from util.src.helpers import *
+import os, platform, subprocess
 import xml.dom.minidom as xml
-from argparse import ArgumentParser
 import shutil
 
-parser = ArgumentParser("miniros", description="Small but powerful version of ROS")
-subparsers = parser.add_subparsers(dest="subparser_name")
-
-parser.add_argument(
-    "-v", "--version", default=False, action="store_true", dest="version"
-)
-parser.add_argument(
-    "--python-executable",
-    default="python" if platform.system() == "Windows" else "python3",
-    dest="pyexec",
-)
-parser.add_argument(
-    "--use-venv",
-    type=str,
-    dest="venv",
-    default=None,
-    help="specify path to venv folder",
-)
-parser.add_argument("--trace", action="store_true")
-
-run_parser = subparsers.add_parser("run")
-create_parser = subparsers.add_parser("create")
-delete_parser = subparsers.add_parser("delete")
-install_parser = subparsers.add_parser("install")
-server_parser = subparsers.add_parser("server")
-
-run_parser.add_argument("package", type=str)
-run_parser.add_argument("--no-stdout", action="store_true")
-run_parser.add_argument("--no-stderr", action="store_true")
-run_parser.add_argument("args", type=list, nargs="*")
-
-create_parser.add_argument("name", type=str)
-create_parser.add_argument("--maintainer", type=str, default="todo")
-create_parser.add_argument("--description", type=str, default="todo")
-create_parser.add_argument("--authors", type=list, nargs="+")
-create_parser.add_argument("--requires", type=list, nargs="+")
-create_parser.add_argument("--entrypoint", type=str, default="main.py")
-create_parser.add_argument("--pypackages", type=list, nargs="+", help="Python packages")
-
-delete_parser.add_argument("name", type=str)
-
-server_parser.add_argument("--host", type=str, default="127.0.0.1")
-server_parser.add_argument("--port", type=int, default=3000)
-server_parser.add_argument(
-    "--superserver", type=str, default="", help="absolute path to superserver config"
-)
-
-install_parser.add_argument(
-    "--no-default-readme",
-    action="store_true",
-    help="disable README.md autogeneration if it`s not found",
-)
-
-parsed = parser.parse_args()
+parser, parsed = parse_arguments()
 
 PYTHON_EXEC = parsed.pyexec
 
@@ -66,11 +13,11 @@ if parsed.version:
     print()
     print(f"MiniROS {VERSION}")
     print()
-    print(r"\033[1;36m    __  ____       _ ____            ")
-    print(r"\033[1;36m   /  |/  /_____  / / __ \____  _____")
-    print(r"\033[1;36m  / /|_/ / / __ \/ / /_/ / __ \/ ___/")
-    print(r"\033[1;36m / /  / / / / / / / _, _/ /_/ (__  ) ")
-    print(r"\033[1;36m/_/  /_/_/_/ /_/_/_/ |_|\____/____/  ")
+    print("\033[1;36m    __  ____       _ ____            ")
+    print("\033[1;36m   /  |/  /_____  / / __ \\____  _____")
+    print("\033[1;36m  / /|_/ / / __ \\/ / /_/ / __ \\/ ___/")
+    print("\033[1;36m / /  / / / / / / / _, _/ /_/ (__  ) ")
+    print("\033[1;36m/_/  /_/_/_/ /_/_/_/ |_|\\____/____/  ")
     print()
     print("\033[0;36mby Vadimych1 (https://github.com/Vadimych1)\033[0m")
     print()
@@ -79,33 +26,16 @@ if parsed.version:
 # TODO: check how it works on windows
 # and made platform-independent solution
 if parsed.venv is not None:
-    PYTHON_EXEC = os.path.join(parsed.venv, "/bin/python3")
-
-
-def get_package_dir(package):
-    if platform.system() == "Windows":
-        return os.path.join(
-            platformdirs.site_data_dir(".miniros", "Vadimych1"), package
-        )
-
-    else:
-        return os.path.join("/var", "lib", ".miniros", package)
-
-
-def ask(prompt: str, choices=None, default=None):
-    if choices is None:
-        choices = []
-        
-    format_s = f"{prompt} {'/'.join(choices)} {f'(default: {default})' if default is not None else ''} > "
-    i = input(format_s)
-    while (len(i) == 0 and default is None) or i not in choices:
-        i = input(f"{prompt} {'/'.join(choices)} >")
-    return i if len(i) > 0 else default
+    PYTHON_EXEC = os.path.join(parsed.venv, "bin/python3")
 
 
 def trace(*args):
     if parsed.trace:
         print("[TRACE]", *args)
+
+
+def error(*args):
+    print(f"\033[0;31m[ERROR]", *args)
 
 
 trace("py executable", PYTHON_EXEC)
@@ -119,7 +49,7 @@ match parsed.subparser_name:
         trace(pkg, path)
 
         if not os.path.exists(path):
-            parser.error(f"package '{pkg}' does not exist")
+            error(f"package '{pkg}' does not exist")
             quit(1)
 
         doc = xml.parse(os.path.join(path, "package.xml"))
@@ -127,7 +57,7 @@ match parsed.subparser_name:
         pkg_name = doc.getElementsByTagName("name")[0].childNodes[0].nodeValue
 
         if pkg != pkg_name:
-            parser.error(f"package '{pkg}' has invalid XML implementation")
+            error(f"package '{pkg}' has invalid XML implementation")
             quit(1)
 
         entrypoint = doc.getElementsByTagName("entrypoint")[0].childNodes[0].nodeValue
@@ -165,7 +95,12 @@ match parsed.subparser_name:
         entrypoint = parsed.entrypoint
         otherexts = parsed.pypackages
 
-        trace(pkg, maintainer, description, authors, requires, entrypoint)
+        trace("pkg", pkg)
+        trace("maintainer", maintainer)
+        trace("description", description)
+        trace("authors", authors)
+        trace("requires", requires)
+        trace("entrypoint", entrypoint)
 
         folders = [
             "src",
@@ -180,7 +115,7 @@ match parsed.subparser_name:
         ]
 
         if os.path.exists("package.xml"):
-            parser.error(f"package '{pkg}' already exists in CWD")
+            error(f"package '{pkg}' already exists in CWD")
             quit(1)
 
         for fld in folders:
@@ -206,13 +141,12 @@ match parsed.subparser_name:
                 open(file, "w").close()
 
         with open("src/__init__.py", "w") as f:
-            f.write(
-                """
+            f.write("""
 # Add your importables here
 from source.datatypes import *
-"""
-            )
+""")
 
+        # some xml shit (sorry)
         doc = xml.Document()
         root = xml.Element("package")
         root.ownerDocument = doc
@@ -312,6 +246,9 @@ from source.datatypes import *
         name = parsed.name
         trace(name)
 
+        if ask(f"Do you want to delete package '{name}'", "yn", "n") == "n":
+            quit(0)
+
         try:
             shutil.rmtree(get_package_dir(name.replace("-", "_").replace(" ", "_")))
         except:
@@ -331,7 +268,7 @@ from source.datatypes import *
 
     case "install":
         if not os.path.exists("package.xml"):
-            parser.error("there is no package in current directory")
+            error("there is no package in current directory")
 
         doc = xml.parse("package.xml").getElementsByTagName("package")[0]
         name = doc.getElementsByTagName("name")[0].childNodes[0].nodeValue
@@ -358,8 +295,7 @@ from source.datatypes import *
 
         if not os.path.exists("setup.py"):
             with open("build/setup.py", "w") as f:
-                f.write(
-                    f"""from setuptools import setup
+                f.write(f"""from setuptools import setup
 
 setup(
     name='miniros_{pname}',
@@ -369,8 +305,7 @@ setup(
     packages=['miniros_{pname}', 'miniros_{pname}.source'],
     keywords=[],
 )
-"""
-                )
+""")
 
         else:
             shutil.copy2("setup.py", "build/setup.py")
@@ -449,7 +384,9 @@ setup(
                 continue
 
             try:
-                os.system(x.replace("PYEXEC", PYTHON_EXEC))
+                # TODO: write about this feature
+                # in docs
+                os.system(x.replace("%PYEXEC%", PYTHON_EXEC))
             except:
                 print(f"\033[1;31m[MiniROS] Failed to run '{x}'\033[0m\n\n")
 

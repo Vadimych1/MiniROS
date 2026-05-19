@@ -5,7 +5,7 @@
 echo "Building and installing pip package"
 cd "$(dirname "$0")" || exit 1
 cd ..
-python3 util/build.py "$@"
+python3 util/src/build.py "$@"
 
 echo '#!/bin/sh
 python3 -m miniros "$@"' | sudo tee /usr/local/bin/miniros > /dev/null

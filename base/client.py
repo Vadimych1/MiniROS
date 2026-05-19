@@ -1,17 +1,22 @@
-from miniros.util.sock import TCPSockClient as SockClient
-from miniros.util.sock import AsyncDistrubutedClient as AsyncSockClient
+from miniros.util.src.sock import TCPSockClient as SockClient
+from miniros.util.src.sock import AsyncDistributedClient as AsyncSockClient
 import threading
 from miniros.util.datatypes import Datatype
-from miniros.util.decorators import decorators
+from miniros.util.decorators import threaded
 from typing import Callable
 import time
 from typing import Any
 import logging
 
-logging.basicConfig(level=logging.WARNING, format="%(asctime)s [%(levelname)s] > %(message)s")
+logging.basicConfig(
+    level=logging.WARNING, format="%(asctime)s [%(levelname)s] > %(message)s"
+)
+
 
 class Topic:
-    def __init__(self, field: str, encoder: Datatype, post_func: Callable[[str, bytearray], Any]):
+    def __init__(
+        self, field: str, encoder: Datatype, post_func: Callable[[str, bytearray], Any]
+    ):
         self.post_func = post_func
         self.field = field
         self.encoder = encoder
@@ -19,14 +24,18 @@ class Topic:
     def post(self, data: Any) -> None:
         self.post_func(self.field, self.encoder.encode(data))
 
+
 class AsyncTopic:
-    def __init__(self, field: str, encoder: Datatype, post_func: Callable[[str, bytearray], Any]):
+    def __init__(
+        self, field: str, encoder: Datatype, post_func: Callable[[str, bytearray], Any]
+    ):
         self.post_func = post_func
         self.field = field
         self.encoder = encoder
 
     async def post(self, data: Any) -> None:
         await self.post_func(self.field, self.encoder.encode(data))
+
 
 class ROSClient:
     def __init__(self, name: str, ip: str = "localhost", port: int = 3000, _sub=False):
@@ -38,7 +47,7 @@ class ROSClient:
 
         if not _sub:
             self.client = SockClient(ip, port, name)
-        
+
             for c in self.__class__.__dict__:
                 if c.startswith("on_"):
                     data = c.split("_")[1:]
@@ -49,19 +58,19 @@ class ROSClient:
                     else:
                         field = data[0]
                         self.client.anon_handlers[field] = self.__getattribute__(c)
-        
+
         self.run_thread = None
-        
-    @decorators.threaded()
+
+    @threaded()
     def _run(self):
         self.client.mainloop()
 
     def run(self) -> threading.Thread:
         self.run_thread = self._run()
-        
+
         time.sleep(0.2)
 
-        for (node, field, handler) in self.fields:
+        for node, field, handler in self.fields:
             self.client.subscribe(node, field, handler)
 
         return self.run_thread
@@ -69,22 +78,23 @@ class ROSClient:
     def topic(self, field: str, datatype: Datatype):
         self.client.post(field, b"")
         return Topic(field, datatype, self.client.post)
-    
+
     def anon(self, node: str, field: str, data: bytearray):
         self.client.anon(node, field, data)
 
+
 class AsyncROSClient(ROSClient):
-    def __init__(self, name, ip = "localhost", port = 3000, _parse_handlers=True):
+    def __init__(self, name, ip="localhost", port=3000, _parse_handlers=True):
         super().__init__(name, ip, port, True)
 
         self.client = AsyncSockClient(ip, port, name)
 
         self.fields = []
         self.client.anon_handlers = {}
-        
+
         if _parse_handlers:
             self._parse_handlers()
-        
+
     def _parse_handlers(self):
         for c in self.__class__.__dict__:
             if c.startswith("on_"):
@@ -100,16 +110,12 @@ class AsyncROSClient(ROSClient):
     async def wait(self, sub_when_activated: bool = True):
         """
         Wait for mainloop to start.
-        
+
         Can be used when running client mainloop and main code with asyncio.gather
         """
 
         await self.client._is_running.wait()
         await self.client._is_sended_credentials.wait()
-
-        ## deprecated
-        # while self.client.w is None or self.client.r is None:
-        #     await asyncio.sleep(0.1)
 
         if sub_when_activated:
             await self.sub()
@@ -119,7 +125,7 @@ class AsyncROSClient(ROSClient):
         Subscribe to provided topic handlers
         """
 
-        for (node, field, handler) in self.fields:
+        for node, field, handler in self.fields:
             await self.client.subscribe(node, field, handler)
 
     async def run(self):
@@ -128,6 +134,8 @@ class AsyncROSClient(ROSClient):
     async def topic(self, field: str, datatype: Datatype):
         await self.client.post(field, b"")
         return AsyncTopic(field, datatype, self.client.post)
-    
-    async def anon(self, node: str, field: str, data: bytes, force_to_tcp: bool = False):
+
+    async def anon(
+        self, node: str, field: str, data: bytes, force_to_tcp: bool = False
+    ):
         await self.client.anon(node, field, data, force_to_tcp)

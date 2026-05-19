@@ -8,6 +8,6 @@ if %errorlevel%==0 ( cd . ) else ( echo Build failed && exit )
 cd /d %~dp0/..
 if %errorlevel%==0 ( cd . ) else ( echo Build failed && exit )
 
-python util/build.py %*
+python util/src/build.py %*
 
 if %errorlevel%==0 ( echo Build done && exit ) else ( echo Build failed && exit )
