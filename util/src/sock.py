@@ -10,6 +10,7 @@ import traceback
 from .sock_types import *
 from threading import Lock as TLock
 from asyncio import Lock as ALock
+import lz4.frame
 
 
 def new_sock(use_udp: bool = False) -> socket.socket:
@@ -30,12 +31,13 @@ def new_sock(use_udp: bool = False) -> socket.socket:
         )
 
     # sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1) if not use_udp else ...
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1024 * 1024 * 32)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1024 * 1024 * 32)
+    # sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1024 * 1024 * 32) # we do not need these
+    # sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1024 * 1024 * 32) # anymore
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     # sock.setblocking(False)
 
     return sock
+
 
 class SockServer:
     """
@@ -51,7 +53,9 @@ class SockServer:
         self.send_lock = TLock()
 
     def send(self, sock: socket.socket, data: bytes, addr: None | AddrLike) -> None:
-        data = zlib.compress(data)
+        # data = zlib.compress(data)
+        data = lz4.frame.compress(data)
+
         length = len(data)
         length = struct.pack(">I", length)
 
@@ -66,8 +70,10 @@ class SockServer:
         try:
             length = self._recv(sock, 4, addr)
             length = struct.unpack(">I", length)[0]
-            logging.info(f"WAITING FOR {length}")
-            return zlib.decompress(self._recv(sock, length, addr))
+
+            # return zlib.decompress(self._recv(sock, length, addr))
+            return lz4.frame.decompress(self._recv(sock, length, addr))
+
         except:
             return bytes([])
 
@@ -342,7 +348,9 @@ class SockClient:
         self.on_rosstat = lambda *val: ...
 
     def send(self, data: bytes) -> None:
-        data = zlib.compress(data)
+        # data = zlib.compress(data)
+        data = lz4.frame.compress(data)
+
         length = len(data)
         length = struct.pack(">I", length)
 
@@ -360,7 +368,10 @@ class SockClient:
         try:
             length = self._recv(4)
             length = struct.unpack(">I", length)[0]
-            return zlib.decompress(self._recv(length))
+
+            # return zlib.decompress(self._recv(length))
+            return lz4.frame.decompress(self._recv(length))
+
         except:
             return bytes([])
 
@@ -610,17 +621,22 @@ class AsyncDistributedServer(SockServer):
         try:
             length = await self._tcp_recv(sock, 4)
             length = struct.unpack(">I", length)[0]
-            data = zlib.decompress(await self._tcp_recv(sock, length))
+
+            data = lz4.frame.decompress(await self._tcp_recv(sock, length))
+            # data = zlib.decompress(await self._tcp_recv(sock, length))
+
             return data
         except:
             return bytes([])
 
     async def tcp_send(self, sock, data):
-        data = zlib.compress(data)
+        # data = zlib.compress(data)
+        data = lz4.frame.compress(data)
+
         length = len(data)
         length = struct.pack(">I", length)
 
-        self.send_lock.acquire()
+        await self.send_lock.acquire()
 
         await self._tcp_send(sock, length)
         await self._tcp_send(sock, data)
@@ -1146,13 +1162,18 @@ class AsyncDistributedClient(SockClient):
         try:
             length = await self._recv(4)
             length = struct.unpack(">I", length)[0]
-            return zlib.decompress(await self._recv(length))
+
+            return lz4.frame.decompress(await self._recv(length))
+            # return zlib.decompress(await self._recv(length))
+
         except Exception as e:
             logging.exception(e)
             return bytes([])
 
     async def send(self, data):
-        data = zlib.compress(data)
+        # data = zlib.compress(data)
+        data = lz4.frame.compress(data)
+
         length = len(data)
         length = struct.pack(">I", length)
 
