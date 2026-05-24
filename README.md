@@ -1,27 +1,17 @@
 # MiniROS
 **Small and powerful robot assembling tool based on ROS principles powered by Python**
 
-#### Work demo in tutorials folder.
-<hr>
-
-# How to install:
-1. Run `scripts/install.sh` on Linux and `scripts/install.bat` on Windows.
-2. Add cloned directory to PATH env variable.
-3. Ready to use. Try running `miniros -h` for help. 
-<hr>
-
-# Docs
-## Built-in packages:
-1. turtlesim - turtle-based package that creates intefraces for controlling turtle.
+<!-- ## Built-in packages:
+1. turtlesim - turtle-based package that creates interfaces for controlling turtle.
 2. turtlecontrol - package for controlling turtlesim
-3. rgt - package for viewing MiniROS connections structure as graph.
+3. rgt - package for viewing MiniROS connections structure as graph. -->
 
 ## How to create your own package:
 1. Create a new directory and CD to it. You can name it as you want, but it will be nice to use only `a-z, A-Z, 0-9, -, _`.
 2. Run command `miniros create <package_name>`. You can specify some metadata for package when creating (see `miniros create -h`) or edit it in `package.xml` file.
 3. Your codebase is now in specified directory. 
 
-### Project structure:
+Project structure:
 ```
 /- <package_name>
 /#/- build - project build
@@ -41,4 +31,4 @@ CD to project root and run `miniros install`. Run with sudo or start with admin 
 ## How to run package:
 Run `miniros run <package_name>`. You can run only installed packages. Non-installed packages (source code) can be run via plain Python.
 
-### See more at [docs](/docs)
+**See how does MiniROS work at [docs](docs/Overview.md)**
