@@ -1,0 +1,9 @@
+*.test.*
+test-*
+build
+test.*
+.vscode
+**/__pycache__
+**/.pytest_cache
+TODO.md
+**/*.egg-info
