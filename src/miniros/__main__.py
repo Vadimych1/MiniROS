@@ -3,7 +3,7 @@ VERSION = "1.1.1a"
 from miniros.util.src.helpers import *
 import os, platform, subprocess
 import xml.dom.minidom as xml
-import shutil
+import shutil, shlex
 
 
 def run_main():
@@ -68,7 +68,7 @@ def run_main():
             )
 
             try:
-                proc = subprocess.run(
+                subprocess.run(
                     [
                         PYTHON_EXEC,
                         os.path.join(path, "src", entrypoint),
@@ -281,7 +281,7 @@ def run_main():
             pkg_dir = get_package_dir(pname)
 
             otherexts = map(
-                lambda x: x.childNodes[0].nodeValue, doc.getElementsByTagName("package")
+                lambda x: x.childNodes[0].nodeValue, doc.getElementsByTagName("pp")
             )
 
             trace(name, pkg_dir)
@@ -359,7 +359,7 @@ def run_main():
             )
             os.chdir("../../")
 
-            print("\033[0;34m[MiniROS] Installing specified python packages")
+            print("\033[0;34m[MiniROS] Installing specified Python packages")
             for x in otherexts:
                 try:
                     subprocess.run([PYTHON_EXEC, "-m", "pip", "install", x])

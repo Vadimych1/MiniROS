@@ -1,5 +1,5 @@
 # Overview
-This is MiniROS docs
+This is the MiniROS documentation.
 
 ## Contents
 1. [API](api/!API.md)

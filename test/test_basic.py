@@ -1,21 +1,17 @@
 import pytest
 import asyncio
 from miniros import AsyncROSClient, datatypes
-from miniros.base.server import run
+from miniros.base.server import AsyncDistributedServer
 
 
 @pytest.fixture
 async def miniros_server(unused_tcp_port):
     host, port = "localhost", unused_tcp_port
+    server = AsyncDistributedServer(host, port)
 
-    task = asyncio.create_task(
-        run(
-            host=host,
-            port=port,
-        )
-    )
+    task = asyncio.create_task(server.run())
 
-    await asyncio.sleep(0.1)
+    await server.wait()
 
     yield host, port
 

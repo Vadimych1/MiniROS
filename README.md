@@ -2,7 +2,7 @@
 **Small and powerful robot assembling tool based on ROS principles powered by Python**
 
 <!-- ## Built-in packages:
-1. turtlesim - turtle-based package that creates intefraces for controlling turtle.
+1. turtlesim - turtle-based package that creates interfaces for controlling turtle.
 2. turtlecontrol - package for controlling turtlesim
 3. rgt - package for viewing MiniROS connections structure as graph. -->
 

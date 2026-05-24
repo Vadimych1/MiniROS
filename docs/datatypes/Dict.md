@@ -59,4 +59,4 @@ encoded_data = Dict.encode({
 decoded_data = Dict.decode(encoded_data, decoders = decoders)
 ```
 
-*Make sure you are using the same encoders-decoders mappings, otherwise data would not decode correctly. Note that Dict datatype is slow and space-inefficient. You should use it only for transferring dicts with varying scheme. Use [miniros.util.NamedComposedDatatype](NamedComposedDatatype.md) for constant-structured data instead*
+*Make sure you are using the same encoders-decoders mappings, otherwise data would not decode correctly. Note that Dict datatype is slow and space-inefficient. You should use it only for transferring dicts with varying schema. Use [miniros.util.NamedComposedDatatype](NamedComposedDatatype.md) for constant-structured data instead*

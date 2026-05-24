@@ -1,5 +1,5 @@
 # Basic datatypes
-These built-in types are used with native Python `bools`, `ints`, `floats`, `strings` and `bytes` or `bytearrays`. They don`t have an own constructor
+These built-in types are used with native Python `bools`, `ints`, `floats`, `strings` and `bytes` or `bytearrays`. They don't have their own constructor.
 
 # Bool
 Handles boolean value

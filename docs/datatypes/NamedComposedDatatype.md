@@ -34,7 +34,7 @@ myData.some_undefined_var = 0 # AttributeError
 print(myData.some_undefined_var) # AttributeError
 ```
 
-**Note:** you can create a new instance of your composed datatype with no arguments. It will have no values and you wont be able to encode it until you set all attributes that were specified on datatype creation
+**Note:** you can create a new instance of your composed datatype with no arguments. It will have no values and you won't be able to encode it until you set all attributes that were specified on datatype creation
 
 After NamedComposedDatatype creation you can use it as a plain MiniROS datatype. This example uses datatype from previous code snippet
 
@@ -77,7 +77,7 @@ async def main():
                     pose = Movement(
                         Vector(1, 2, 3),
                         Vector(4, 5, 6),
-                    )
+                    ),
                     score_vector = Vector(10, 0, 0),
                     meta = {"name": "my_best_robot", "workspace": "vbot"}
                 )

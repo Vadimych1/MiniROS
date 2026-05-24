@@ -8,10 +8,15 @@ def ask(prompt: str, choices=None, default=None):
         choices = []
 
     format_s = f"{prompt} {'/'.join(choices)} {f'(default: {default})' if default is not None else ''} > "
-    i = input(format_s)
-    while (len(i) == 0 and default is None) or i not in choices:
-        i = input(f"{prompt} {'/'.join(choices)} >")
-    return i if len(i) > 0 else default
+
+    while True:
+        i = input(format_s)
+
+        if not i and default is not None:
+            return default
+
+        if i in choices:
+            return i
 
 
 def get_package_dir(package):
@@ -84,5 +89,5 @@ def parse_arguments():
     )
 
     parsed = parser.parse_args()
-    
+
     return parser, parsed

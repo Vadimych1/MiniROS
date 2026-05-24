@@ -19,7 +19,7 @@ class Datatypes(Enum):
     ANON = 0x07
     SEND_ANON = 0x08
 
-    ROSSTAT = 0xFD
+    ROSSTAT = 0xFB
 
     GET_UDP_AUTH = 0xFC
     SEND_UDP_AUTH = 0xFD

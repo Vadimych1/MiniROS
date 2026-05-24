@@ -19,7 +19,7 @@ MiniROS has these built-in datatypes:
 - [LidarDatatype](LidarDatatype.md)
 
 ## Creating your own datatype
-There is two ways of datatype creation
+There are two ways to create a datatype
 
 ### 1. Creating a subclass of `miniros.util.datatypes.Datatype`
 This approach could be used to create datatypes with complex encoding logic and a lot of methods 
@@ -34,7 +34,7 @@ class Dog(Datatype):
 
     @staticmethod
     def encode(data: "Dog") -> bytearray:
-        return packb([dog.name, dog.age])
+        return packb([data.name, data.age])
     
     @staticmethod
     def decode(data: bytearray) -> Dog:

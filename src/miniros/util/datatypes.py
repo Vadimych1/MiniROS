@@ -3,7 +3,7 @@ import numpy as np
 import cv2 as cv
 from enum import Enum
 import struct
-from msgpack import *
+from msgpack import packb, unpackb
 import math
 
 
@@ -208,10 +208,10 @@ class NumpyArrayType(Enum):
 
 
 _arr_type_to_numpy = {
-    NumpyArrayType.INT8: np.dtype("uint8"),
+    NumpyArrayType.INT8: np.dtype("int8"),
     NumpyArrayType.INT16: np.dtype("int16"),
     NumpyArrayType.INT32: np.dtype("int32"),
-    NumpyArrayType.INT32: np.dtype("int32"),
+    NumpyArrayType.INT64: np.dtype("int64"),
     #
     NumpyArrayType.UINT8: np.dtype("uint8"),
     NumpyArrayType.UINT16: np.dtype("uint16"),

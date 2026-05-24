@@ -7,4 +7,4 @@ Movement(pos: Vector, ang: Vector)
 ```
 
 ## Methods
-- Support add and subtract
+- Supports addition and subtraction
