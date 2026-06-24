@@ -51,15 +51,15 @@ class Status(Enum):
 class Field:
     __slots__ = ("name", "data", "subscribers")
 
-    def __init__(self, name: bytes, data: bytes, subscribers: list[str]):
+    def __init__(self, name: bytes, data: bytes, subscribers: list[str] | set[str]):
         self.data = data
-        self.subscribers = subscribers
+        self.subscribers = set(subscribers)
         self.name = name
 
     def to_json(self):
         return {
             "name": self.name.decode(),
-            "subscribers": list(map(bytes.decode, self.subscribers)),
+            "subscribers": set(map(bytes.decode, self.subscribers)),
         }
 
 

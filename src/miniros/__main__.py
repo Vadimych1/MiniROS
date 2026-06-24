@@ -3,7 +3,7 @@ VERSION = "1.1.1a"
 from miniros.util.src.helpers import *
 import os, platform, subprocess
 import xml.dom.minidom as xml
-import shutil, shlex
+import shutil
 
 
 def run_main():
@@ -256,7 +256,7 @@ from source.datatypes import *
 
             try:
                 shutil.rmtree(get_package_dir(name.replace("-", "_").replace(" ", "_")))
-            except:
+            except OSError:
                 pass
 
             subprocess.run(
@@ -395,7 +395,7 @@ setup(
                     # TODO: write about this feature
                     # in docs
                     os.system(x.replace("%PYEXEC%", PYTHON_EXEC))
-                except:
+                except OSError:
                     print(f"\033[1;31m[MiniROS] Failed to run '{x}'\033[0m\n\n")
 
             print(

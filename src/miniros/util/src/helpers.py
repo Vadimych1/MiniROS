@@ -19,6 +19,7 @@ def ask(prompt: str, choices=None, default=None):
             return i
 
 
+# TODO: test platformdirs solution on linux and use it
 def get_package_dir(package):
     if platform.system() == "Windows":
         return os.path.join(

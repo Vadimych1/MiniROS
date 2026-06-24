@@ -141,8 +141,8 @@ class NamedComposedDatatype(Datatype):
     def __call__(self, **kwds):
         return self.new(**kwds)
 
-    def encode(self, data: NamedComposedValue):
-        values: dict[str, Any] = data.values
+    def encode(self, encode_data: NamedComposedValue) -> bytearray:
+        values: dict[str, Any] = encode_data.values
         data = bytearray([self.control_sum])
 
         for k, v in self.fields.items():

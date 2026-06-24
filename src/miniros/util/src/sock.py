@@ -8,8 +8,9 @@ import random
 import traceback
 from .sock_types import *
 from threading import Lock as TLock
-from asyncio import Lock as ALock
 import lz4.frame
+import warnings
+from asyncio import Queue
 
 
 def new_sock(use_udp: bool = False) -> socket.socket:
@@ -38,6 +39,9 @@ def new_sock(use_udp: bool = False) -> socket.socket:
     return sock
 
 
+@warnings.deprecated(
+    "threaded SockServer is deprecated. Use AsyncDistributedServer instead"
+)
 class SockServer:
     """
     Socket server base class
@@ -243,7 +247,7 @@ class SockServer:
                             else:
                                 self.servers[node_name].fields[
                                     field_name
-                                ].subscribers.append(CREDENTIALS)
+                                ].subscribers.add(CREDENTIALS)
 
                         case Datatypes.ANON:
                             logging.debug("ANON")
@@ -330,6 +334,12 @@ class SockServer:
                 del self.servers[CREDENTIALS]
 
 
+# TODO: migrate SockClient logic into AsyncDistributedClient
+
+
+@warnings.deprecated(
+    "threaded SockClient is deprecated. Use AsyncDistributedClient instead"
+)
 class SockClient:
     def __init__(self, ip: str, port: int, name: str):
         self.ip = ip
@@ -588,8 +598,6 @@ class AsyncDistributedServer(SockServer):
 
         super().__init__(ip, port)
 
-        self.send_lock = ALock()
-
     async def run(self) -> None:
         self.sock: asyncio.Server = await asyncio.start_server(
             self.tcp_handler, self.ip, self.port
@@ -637,18 +645,15 @@ class AsyncDistributedServer(SockServer):
         length = len(data)
         length = struct.pack(">I", length)
 
-        await self.send_lock.acquire()
-
         await self._tcp_send(sock, length)
         await self._tcp_send(sock, data)
-
-        self.send_lock.release()
 
     async def tcp_broadcast(self, sockets: list[str], data):
         tasks = []
         for socket in sockets.copy():
             tasks.append(self.tcp_send(self.servers[socket].socket, data))
-        await asyncio.gather(*tasks, return_exceptions=False)
+
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     async def tcp_handler(self, r: asyncio.StreamReader, w: asyncio.StreamWriter):
         async def _rcv():
@@ -676,6 +681,7 @@ class AsyncDistributedServer(SockServer):
 
                 if len(data) == 0:
                     writer.close()
+                    await writer.wait_closed()
                     break
 
                 data, datatype = data[1:], data[0]
@@ -740,8 +746,7 @@ class AsyncDistributedServer(SockServer):
             for server in self.servers.values():
                 for field in server.fields.values():
                     try:
-                        while CREDENTIALS in field.subscribers:
-                            field.subscribers.remove(CREDENTIALS)
+                        field.subscribers.discard(CREDENTIALS)
                     except:
                         pass
 
@@ -831,7 +836,7 @@ class AsyncDistributedServer(SockServer):
                 subscribers=[CREDENTIALS],
             )
         else:
-            self.servers[raw_node_name].fields[raw_field_name].subscribers.append(
+            self.servers[raw_node_name].fields[raw_field_name].subscribers.add(
                 CREDENTIALS
             )
 
@@ -943,6 +948,7 @@ class AsyncDistributedServer(SockServer):
         return CREDENTIALS
 
 
+# TODO:  Implement a maximum buffer size per address with overflow handling (drop oldest or newest). Add periodic cleanup of stale buffer entries
 class _ClientRecvProtocol(asyncio.DatagramProtocol):
     def __init__(self, root: "AsyncDistributedClient"):
         super().__init__()
@@ -976,14 +982,15 @@ class AsyncDistributedClient(SockClient):
         self.udp_buffers: dict[AddrLike, bytes] = {}
         self.udp_servers: dict[str, UDPConnection] = {}
 
-        self.r: asyncio.StreamReader = None
-        self.w: asyncio.StreamWriter = None
+        self.r: asyncio.StreamReader | None = None
+        self.w: asyncio.StreamWriter | None = None
 
-        self.transport: _ClientRecvProtocol = None
+        self.transport: asyncio.DatagramTransport | None = None
 
         self._is_running = asyncio.Event()
         self._is_sended_credentials = asyncio.Event()
-        self._is_receiving = False
+
+        self._tcp_request_queue: Queue[bytes] = Queue(100)
 
     async def subscribe(self, node: str, field: str, handler: Callable | None) -> None:
         await self.send(
@@ -1098,6 +1105,7 @@ class AsyncDistributedClient(SockClient):
                 (self.udp_servers[node].ip, self.udp_servers[node].port),
             )
 
+            # TODO: Use asyncio.Event or asyncio.wait_for() with a proper timeout. Decouple the ping-pong handshake from the message send path
             counter = 0
             self.udp_servers[node].has_tried_to_connect = True
             while not self.udp_servers[node].has_connection and counter < 100:
@@ -1146,14 +1154,7 @@ class AsyncDistributedClient(SockClient):
     #     )
 
     async def _recv(self, length: int) -> bytes:
-        while self._is_receiving:
-            await asyncio.sleep(0.003)
-
-        self._is_receiving = True
-        data = await self.r.readexactly(length)
-        self._is_receiving = False
-
-        return data
+        return await self.r.readexactly(length)
 
     async def _send(self, data) -> None:
         self.w.write(data)
@@ -1188,6 +1189,7 @@ class AsyncDistributedClient(SockClient):
     async def send_udp(self, data: bytes, addr: AddrLike):
         self.transport.sendto(struct.pack(">I", len(data)) + data, addr)
 
+    # TODO: add an Queue to properly handle situations when requests are sending too fast
     async def _tcp_mainloop(self):
         while self._is_running.is_set():
             data = await self.recv()
@@ -1196,6 +1198,11 @@ class AsyncDistributedClient(SockClient):
                 await asyncio.sleep(0.05)
                 continue
 
+            await self._tcp_request_queue.put(data)
+
+    async def _tcp_handler(self):
+        while self._is_running.is_set():
+            data = await self._tcp_request_queue.get()
             data, datatype = data[1:], data[0]
 
             try:
@@ -1353,6 +1360,7 @@ class AsyncDistributedClient(SockClient):
                     bytes([Datatypes.ERROR.value, Errortypes.METHOD_NOT_FOUND.value])
                 )
 
+    # TODO: add an Queue to properly handle situations when requests are sending too fast
     async def _udp_mainloop(self):
         while self._is_running.is_set():
             tasks = []
@@ -1428,10 +1436,11 @@ class AsyncDistributedClient(SockClient):
 
         try:
             tcp_task = asyncio.create_task(self._tcp_mainloop())
+            tcp_queue_task = asyncio.create_task(self._tcp_handler())
             udp_task = asyncio.create_task(self._udp_mainloop())
 
             done, pending = await asyncio.wait(
-                [tcp_task, udp_task],
+                [tcp_task, udp_task, tcp_queue_task],
                 return_when=asyncio.FIRST_COMPLETED,
             )
 

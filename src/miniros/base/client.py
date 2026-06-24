@@ -1,7 +1,7 @@
 from miniros.util.src.sock import TCPSockClient as SockClient
 from miniros.util.src.sock import AsyncDistributedClient as AsyncSockClient
 import threading
-from miniros.util.datatypes import Datatype
+from miniros.util.datatypes import NamedComposedDatatype, Datatype
 from miniros.util.decorators import threaded
 from typing import Callable
 import time
@@ -27,7 +27,7 @@ class Topic:
 
 class AsyncTopic:
     def __init__(
-        self, field: str, encoder: Datatype, post_func: Callable[[str, bytearray], Any]
+        self, field: str, encoder: NamedComposedDatatype | type[Datatype], post_func: Callable[[str, bytearray], Any]
     ):
         self.post_func = post_func
         self.field = field
@@ -131,7 +131,7 @@ class AsyncROSClient(ROSClient):
     async def run(self):
         await self.client.mainloop()
 
-    async def topic(self, field: str, datatype: Datatype):
+    async def topic(self, field: str, datatype: NamedComposedDatatype | type[Datatype]):
         await self.client.post(field, b"")
         return AsyncTopic(field, datatype, self.client.post)
 

@@ -9,3 +9,5 @@ TODO.md
 **/*.egg-info
 dist
 src/miniros/simulator
+log.txt
+response.md

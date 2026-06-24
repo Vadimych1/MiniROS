@@ -42,6 +42,7 @@ def aparsedata(datatype: type, arg: int = 1):
     return wwrapper
 
 
+# TODO: add exception capturing logic inside thread
 def threaded(daemon=True):
     def wwrapper(func):
         def wrapper(*args, **kwargs):
