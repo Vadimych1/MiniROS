@@ -5,6 +5,7 @@ from enum import Enum
 import struct
 from msgpack import packb, unpackb
 import math
+import io
 
 
 class Datatype:
@@ -191,56 +192,19 @@ class NamedComposedDatatype(Datatype):
         )
 
 
-class NumpyArrayType(Enum):
-    INT8 = 0x00
-    INT16 = 0x01
-    INT32 = 0x02
-    INT64 = 0x03
-
-    UINT8 = 0x04
-    UINT16 = 0x05
-    UINT32 = 0x06
-    UINT64 = 0x07
-
-    FLOAT16 = 0x08
-    FLOAT32 = 0x09
-    FLOAT64 = 0x0A
-
-
-_arr_type_to_numpy = {
-    NumpyArrayType.INT8: np.dtype("int8"),
-    NumpyArrayType.INT16: np.dtype("int16"),
-    NumpyArrayType.INT32: np.dtype("int32"),
-    NumpyArrayType.INT64: np.dtype("int64"),
-    #
-    NumpyArrayType.UINT8: np.dtype("uint8"),
-    NumpyArrayType.UINT16: np.dtype("uint16"),
-    NumpyArrayType.UINT32: np.dtype("uint32"),
-    NumpyArrayType.UINT64: np.dtype("uint64"),
-    #
-    NumpyArrayType.FLOAT16: np.dtype("float16"),
-    NumpyArrayType.FLOAT32: np.dtype("float32"),
-    NumpyArrayType.FLOAT64: np.dtype("float64"),
-}
-_numpy_to_arr_type = {val: key for key, val in _arr_type_to_numpy.items()}
-
-
 class NumpyArray(Datatype):
     STATIC_SIZE = None
 
     @staticmethod
     def decode(data: bytearray):
-        datatype = NumpyArrayType(data[0])
-        dtype = _arr_type_to_numpy[datatype]
-        b = np.frombuffer(data[1:], dtype)
-
-        return b
+        return np.load(io.BytesIO(data))
 
     @staticmethod
     def encode(data: np.ndarray):
-        encoded = data.tobytes()
-        datatype = _numpy_to_arr_type[data.dtype]
-        return bytearray([datatype.value]) + encoded
+        buffer = io.BytesIO()
+        np.save(buffer, data)
+
+        return buffer.getvalue()
 
 
 class AnyArray(Datatype):

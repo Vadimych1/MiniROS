@@ -1,6 +1,5 @@
 import socket, struct
 import logging
-import zlib
 import threading
 from typing import Callable
 import json
