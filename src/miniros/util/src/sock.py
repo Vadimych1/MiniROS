@@ -1,6 +1,5 @@
 import socket, struct
 import logging
-import zlib
 import threading
 from typing import Callable
 import json
@@ -53,7 +52,6 @@ class SockServer:
         self.send_lock = TLock()
 
     def send(self, sock: socket.socket, data: bytes, addr: None | AddrLike) -> None:
-        # data = zlib.compress(data)
         data = lz4.frame.compress(data)
 
         length = len(data)
@@ -71,7 +69,6 @@ class SockServer:
             length = self._recv(sock, 4, addr)
             length = struct.unpack(">I", length)[0]
 
-            # return zlib.decompress(self._recv(sock, length, addr))
             return lz4.frame.decompress(self._recv(sock, length, addr))
 
         except:
@@ -369,7 +366,6 @@ class SockClient:
             length = self._recv(4)
             length = struct.unpack(">I", length)[0]
 
-            # return zlib.decompress(self._recv(length))
             return lz4.frame.decompress(self._recv(length))
 
         except:
@@ -630,14 +626,12 @@ class AsyncDistributedServer(SockServer):
             length = struct.unpack(">I", length)[0]
 
             data = lz4.frame.decompress(await self._tcp_recv(sock, length))
-            # data = zlib.decompress(await self._tcp_recv(sock, length))
 
             return data
         except:
             return bytes([])
 
     async def tcp_send(self, sock, data):
-        # data = zlib.compress(data)
         data = lz4.frame.compress(data)
 
         length = len(data)

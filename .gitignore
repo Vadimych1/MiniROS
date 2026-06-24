@@ -8,3 +8,4 @@ test.*
 TODO.md
 **/*.egg-info
 dist
+src/miniros/simulator

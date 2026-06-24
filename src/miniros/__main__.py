@@ -145,8 +145,8 @@ def run_main():
 
             with open("src/__init__.py", "w") as f:
                 f.write("""
-    # Add your importables here
-    from source.datatypes import *
+# Add your importables here
+from source.datatypes import *
     """)
 
             # some xml shit (sorry)
@@ -301,15 +301,14 @@ def run_main():
             if not os.path.exists("setup.py"):
                 with open("build/setup.py", "w") as f:
                     f.write(f"""from setuptools import setup
-
-    setup(
-        name='miniros_{pname}',
-        version='{VERSION}',
-        description='miniros package',
-        license='MIT',
-        packages=['miniros_{pname}', 'miniros_{pname}.source'],
-        keywords=[],
-    )
+setup(
+    name='miniros_{pname}',
+    version='{VERSION}',
+    description='miniros package',
+    license='MIT',
+    packages=['miniros_{pname}', 'miniros_{pname}.source'],
+    keywords=[],
+)
     """)
 
             else:
