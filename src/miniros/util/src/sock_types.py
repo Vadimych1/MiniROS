@@ -18,6 +18,8 @@ class Datatypes(Enum):
 
     ANON = 0x07
     SEND_ANON = 0x08
+    
+    CREATE_TOPIC = 0x09
 
     ROSSTAT = 0xFB
 

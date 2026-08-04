@@ -21,13 +21,12 @@ def ask(prompt: str, choices=None, default=None):
 
 # TODO: test platformdirs solution on linux and use it
 def get_package_dir(package):
-    if platform.system() == "Windows":
-        return os.path.join(
-            platformdirs.site_data_dir(".miniros", "Vadimych1"), package
-        )
-
-    else:
-        return os.path.join("/var", "lib", ".miniros", package)
+    # if platform.system() == "Windows":
+    return os.path.join(
+        platformdirs.user_data_dir("miniros", "Vadimych1"), package
+    )
+    # else:
+    #     return os.path.join("/var", "lib", ".miniros", package)
 
 
 def parse_arguments():

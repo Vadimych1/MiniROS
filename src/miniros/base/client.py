@@ -1,9 +1,6 @@
 from miniros.util.src.sock import AsyncDistributedClient as AsyncSockClient
-import threading
 from miniros.util.datatypes import NamedComposedDatatype, Datatype
-from miniros.util.decorators import threaded
 from typing import Callable
-import time
 from typing import Any
 import logging
 
@@ -80,7 +77,7 @@ class AsyncROSClient:
         await self.client.mainloop()
 
     async def topic(self, field: str, datatype: NamedComposedDatatype | type[Datatype]):
-        await self.client.post(field, b"")
+        await self.client.create_topic(field)
         return AsyncTopic(field, datatype, self.client.post)
 
     async def anon(

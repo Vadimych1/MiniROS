@@ -1,15 +1,16 @@
 import socket, struct
 import logging
-import threading
 from typing import Callable
 import json
-import time, asyncio
+import asyncio
 import random
 import traceback
 from .sock_types import *
-from threading import Lock as TLock
 import lz4.frame
 from asyncio import Queue
+
+
+# logging.basicConfig(level=logging.DEBUG)
 
 
 def new_sock(use_udp: bool = False) -> socket.socket:
@@ -173,6 +174,10 @@ class AsyncDistributedServer:
                         case Datatypes.ANON:
                             await self._check(CREDENTIALS, "ANON")
                             await self._handle_anon(data, CREDENTIALS, w)
+                            
+                        case Datatypes.CREATE_TOPIC:
+                            await self._check(CREDENTIALS, "CREATE_TOPIC")
+                            await self._handle_create_topic(data, CREDENTIALS, w)
 
                         # case Datatypes.ROSSTAT:
                         #     await self._check(CREDENTIALS, "ROSSTAT")
@@ -249,7 +254,7 @@ class AsyncDistributedServer:
         raw_node_name = data[2 : 2 + name_length]
         raw_field_name = data[2 + name_length : 2 + name_length + field_length]
 
-        logging.debug(CREDENTIALS, "sended anon to", raw_node_name, raw_field_name)
+        logging.debug(f"{CREDENTIALS} sent anon to {raw_node_name}/{raw_field_name}")
 
         if (
             raw_node_name not in self.servers
@@ -281,7 +286,7 @@ class AsyncDistributedServer:
         raw_node_name = data[2 : 2 + name_length]
         raw_field_name = data[2 + name_length : 2 + name_length + field_length]
 
-        logging.debug(CREDENTIALS, "subscribed to", raw_node_name, raw_field_name)
+        logging.debug(f"{CREDENTIALS} subscribed to {raw_node_name}/{raw_field_name}")
 
         if raw_node_name not in self.servers:
             self.servers[raw_node_name] = Connection(raw_node_name, {}, None, None)
@@ -304,9 +309,11 @@ class AsyncDistributedServer:
 
         raw_field_name = data[1:data_start]
 
-        logging.debug(CREDENTIALS, "posted to", raw_field_name)
+        logging.debug(f"{CREDENTIALS} posted to {raw_field_name}")
 
         if raw_field_name not in self.servers[CREDENTIALS].fields:
+            logging.debug(f"{CREDENTIALS} created {raw_field_name}")
+            
             self.servers[CREDENTIALS].fields[raw_field_name] = Field(
                 name=raw_field_name, data=data[data_start:], subscribers=[]
             )
@@ -315,7 +322,7 @@ class AsyncDistributedServer:
             self.servers[CREDENTIALS].fields[raw_field_name].data = data[data_start:]
 
         await self.tcp_broadcast(
-            self.servers[CREDENTIALS].fields[raw_field_name].subscribers,
+            list(self.servers[CREDENTIALS].fields[raw_field_name].subscribers),
             bytes(
                 [
                     Datatypes.SEND_GET.value,
@@ -329,6 +336,22 @@ class AsyncDistributedServer:
         )
 
         await w(bytes([Datatypes.SEND_POST.value, Status.OK.value]))
+
+    async def _handle_create_topic(self, data, CREDENTIALS, w):
+        field_length = data[0]
+        raw_field_name = data[1:]
+        
+        logging.debug(f"{CREDENTIALS} created {raw_field_name}")
+        
+        if raw_field_name not in self.servers[CREDENTIALS].fields:
+            self.servers[CREDENTIALS].fields[raw_field_name] = Field(
+                name=raw_field_name, data=b"", subscribers=[]
+            )
+        
+        else:
+            # TODO: send error
+            logging.debug(f"topic {raw_field_name} already exists")
+            
 
     async def _handle_get(self, data, CREDENTIALS, w):
         name_length = data[0]
@@ -606,6 +629,17 @@ class AsyncDistributedClient:
                         ]
                     )
                 )
+
+    async def create_topic(self, field: str) -> None:
+        await self.send(
+            bytes(
+                [
+                    Datatypes.CREATE_TOPIC.value,
+                    len(field),
+                    *field.encode()
+                ]
+            )
+        )
 
     # async def rosstat(self) -> None:
     #     await self.send(
