@@ -368,6 +368,8 @@ class Vector(Datatype):
     def decode(data: bytearray) -> "Vector":
         return Vector(*struct.unpack(">fff", data))
 
+    def copy(self):
+        return Vector(self.x, self.y, self.z)
 
 class Movement(Datatype):
     STATIC_SIZE = 4 * 6
@@ -468,6 +470,6 @@ class Dict(Datatype):
 
 
 LidarDatatype = NamedComposedDatatype(
-    {"distances": NumpyArray, "angles": NumpyArray},
+    {"distances": NumpyArray, "angles": NumpyArray, "pos": Vector},
     "LidarDatatype",
 )

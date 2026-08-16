@@ -12,33 +12,6 @@ from asyncio import Queue
 
 # logging.basicConfig(level=logging.DEBUG)
 
-
-def new_sock(use_udp: bool = False) -> socket.socket:
-    """
-    Initializes new fast socket
-    :param
-    """
-
-    sock = None
-    if "AF_UNIX" in socket.__dict__ and False:  # TODO: fix unix sockets
-        sock = socket.socket(
-            socket.AF_UNIX, socket.SOCK_DGRAM if use_udp else socket.SOCK_STREAM
-        )
-
-    else:
-        sock = socket.socket(
-            socket.AF_INET, socket.SOCK_DGRAM if use_udp else socket.SOCK_STREAM
-        )
-
-    # sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1) if not use_udp else ...
-    # sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1024 * 1024 * 32) # we do not need these
-    # sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1024 * 1024 * 32) # anymore
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    # sock.setblocking(False)
-
-    return sock
-
-
 class AsyncDistributedServer:
     """
     Async TCP server class
@@ -114,6 +87,11 @@ class AsyncDistributedServer:
         await asyncio.gather(*tasks, return_exceptions=True)
 
     async def tcp_handler(self, r: asyncio.StreamReader, w: asyncio.StreamWriter):
+        sock = w.get_extra_info('socket')
+        
+        if sock is not None:
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        
         async def _rcv():
             return await self.tcp_recv(r)
 
@@ -352,7 +330,6 @@ class AsyncDistributedServer:
             # TODO: send error
             logging.debug(f"topic {raw_field_name} already exists")
             
-
     async def _handle_get(self, data, CREDENTIALS, w):
         name_length = data[0]
         field_length = data[1]
@@ -436,7 +413,7 @@ class _ClientRecvProtocol(asyncio.DatagramProtocol):
 
     def connection_made(self, transport):
         self.transport = transport
-
+        
     def datagram_received(self, data: bytes, addr: AddrLike):
         if addr in self.root.udp_buffers:
             self.root.udp_buffers[addr] += data
@@ -920,6 +897,10 @@ class AsyncDistributedClient:
 
         self.r = r
         self.w = w
+        self.tcp_sock = w.get_extra_info('socket')
+                
+        if self.tcp_sock is not None:
+            self.tcp_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 
         transport, protocol = await asyncio.get_event_loop().create_datagram_endpoint(
             lambda: _ClientRecvProtocol(self),
@@ -928,7 +909,6 @@ class AsyncDistributedClient:
         )
 
         self.transport = transport
-
         self._is_running.set()
 
         try:
