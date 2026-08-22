@@ -84,3 +84,6 @@ class AsyncROSClient:
         self, node: str, field: str, data: bytes, force_to_tcp: bool = False
     ):
         await self.client.anon(node, field, data, force_to_tcp)
+
+    async def stop(self):
+        self.client._is_running.clear()

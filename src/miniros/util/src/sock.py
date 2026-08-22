@@ -104,12 +104,22 @@ class AsyncDistributedServer:
         self,
         r: Callable[[], bytes],
         w: Callable[[bytes, None], None],
-        reader,
+        _, # reader
         writer: asyncio.StreamWriter,
     ) -> None:
         CREDENTIALS = None
 
         await w(bytes([Datatypes.REQUEST_AUTH.value]))
+
+        handlers = {
+            Datatypes.SEND_UDP_AUTH: self._handle_send_udp_auth,
+            Datatypes.GET_UDP_AUTH: self._handle_get_udp_auth,
+            Datatypes.GET: self._handle_get,
+            Datatypes.POST: self._handle_post,
+            Datatypes.SUBSCRIBE: self._handle_subscribe,
+            Datatypes.ANON: self._handle_anon,
+            Datatypes.CREATE_TOPIC: self._handle_create_topic,
+        }        
 
         try:
             while True:
@@ -123,50 +133,24 @@ class AsyncDistributedServer:
                 data, datatype = data[1:], data[0]
 
                 try:
-                    match Datatypes(datatype):
+                    dt = Datatypes(datatype)
+                    match dt:
                         case Datatypes.SEND_AUTH:
                             CREDENTIALS = await self._handle_send_auth(
                                 data, CREDENTIALS, w, writer
                             )
-
-                        case Datatypes.SEND_UDP_AUTH:
-                            await self._check(CREDENTIALS, "SEND_UDP_AUTH")
-                            await self._handle_send_udp_auth(data, CREDENTIALS, w)
-
-                        case Datatypes.GET_UDP_AUTH:
-                            await self._check(CREDENTIALS, "GET_UDP_AUTH")
-                            await self._handle_get_udp_auth(data, CREDENTIALS, w)
-
-                        case Datatypes.GET:
-                            await self._check(CREDENTIALS, "GET")
-                            await self._handle_get(data, CREDENTIALS, w)
-
-                        case Datatypes.POST:
-                            await self._check(CREDENTIALS, str(data) + " | POST")
-                            await self._handle_post(data, CREDENTIALS, w)
-
-                        case Datatypes.SUBSCRIBE:
-                            await self._check(CREDENTIALS, "SUBSCRIBE")
-                            await self._handle_subscribe(data, CREDENTIALS, w)
-
-                        case Datatypes.ANON:
-                            await self._check(CREDENTIALS, "ANON")
-                            await self._handle_anon(data, CREDENTIALS, w)
-                            
-                        case Datatypes.CREATE_TOPIC:
-                            await self._check(CREDENTIALS, "CREATE_TOPIC")
-                            await self._handle_create_topic(data, CREDENTIALS, w)
-
-                        # case Datatypes.ROSSTAT:
-                        #     await self._check(CREDENTIALS, "ROSSTAT")
-                        #     await self._handle_rosstat(w)
 
                         case Datatypes.ERROR:
                             await self._check(CREDENTIALS, "ERROR")
                             await self._handle_error(data)
 
                         case _:
-                            raise Exception
+                            if dt in handlers:
+                                await self._check(CREDENTIALS, dt.name)
+                                await handlers[dt](data, CREDENTIALS, w)
+                                
+                            else:
+                                raise Exception("method not found")
 
                 except Exception as e:
                     logging.error("\n".join(traceback.format_exception(e)))
@@ -193,7 +177,7 @@ class AsyncDistributedServer:
             # set client socket to None
             self.servers[CREDENTIALS].socket = None
 
-    async def _check(self, CREDENTIALS: bytes, additional: str | None = None):
+    async def _check(self, CREDENTIALS: bytes | None, additional: str | None = None):
         if CREDENTIALS is None:
             raise ConnectionError(
                 f"node hasn`t sent valid credentials {('(' + str(additional) + ')') if additional is not None else ''}"

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "miniros"
-version = "1.0.3"
+version = "1.1.0"
 description = "Small and powerful robot assembling tool based on ROS principles powered by Python"
 authors = [
     {name = "Vadim Lebedenko (Vadimych1)", email = "vaimlebedenko0@gmail.com"}
@@ -15,7 +15,8 @@ dependencies = [
     "numpy==2.2.6",
     "platformdirs>=4.5.0",
     "msgpack>=1.1.2",
-    "lz4>=4.4.4"
+    "lz4>=4.4.4",
+    "psutil>=7.0.0"
 ]
 
 [project.optional-dependencies]

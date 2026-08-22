@@ -1,34 +1,47 @@
 # MiniROS
-**Small and powerful robot assembling tool based on ROS principles powered by Python**
+**Simple ROS-like tool powered by Python**
 
-<!-- ## Built-in packages:
-1. turtlesim - turtle-based package that creates interfaces for controlling turtle.
-2. turtlecontrol - package for controlling turtlesim
-3. rgt - package for viewing MiniROS connections structure as graph. -->
+## Installation
+Run these commands in your terminal to install MiniROS:
+- **with venv (recommended)**:
+```bash
+python -m venv venv
+git clone https://github.com/Vadimych1/MiniROS
+venv/bin/pip install ./MiniROS # or venv/Scripts/pip on Windows
+```
+Do not forget to activate your venv before using MiniROS
 
-## How to create your own package:
-1. Create a new directory and CD to it. You can name it as you want, but it will be nice to use only `a-z, A-Z, 0-9, -, _`.
-2. Run command `miniros create <package_name>`. You can specify some metadata for package when creating (see `miniros create -h`) or edit it in `package.xml` file.
-3. Your codebase is now in specified directory. 
+- **without venv**:
+```bash
+git clone https://github.com/Vadimych1/MiniROS
+cd MiniROS
+pip install .
+cd ..
+```
+
+## How to create and install package
+1. Create a new directory and `cd` to it; use only Latin letters, numbers, dashes, and underscores
+2. Run `miniros create <package_name>`. You can specify package metadata (see `miniros create -h`) or edit it directly after creation (see `package.xml`)
+3. Your package is created in current directory
 
 Project structure:
 ```
 /- <package_name>
-/#/- build - project build
+/#/- build - build files
 /#/- src - source files
 /#/#/- source - source files
-/#/#/#/- __init__.py - don`t touch it
-/#/#/#/- datatypes.py - specify your datatypes here
-/#/#/- __init__.py - add import * from .source.<file>
-/#/#/- main.py - code that runs with 'miniros run <package>'
-/#/- package.xml - metadata of the project
+/#/#/#/- datatypes.py - write your datatypes here
+/#/#/- main.py - default entrypoint
+/#/- package.xml - project metadata
 ```
-Write your code in `src/source` folder, use it in `src/main.py`
+
+MiniROS will write example code into `main.py` for you
+You can change package name, version, entrypoint and other things by editing `package.xml`
 
 ## How to install package:
-CD to project root and run `miniros install`. Run with sudo or start with admin rules of needed.
+Run `miniros install path/to/package_root` or just `miniros install` if running in package directory
 
 ## How to run package:
-Run `miniros run <package_name>`. You can run only installed packages. Non-installed packages (source code) can be run via plain Python.
+Run `miniros run <package_name>`
 
 **See how does MiniROS work at [docs](docs/Overview.md)**

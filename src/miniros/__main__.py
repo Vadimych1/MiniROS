@@ -1,15 +1,165 @@
-VERSION = "1.1.1a"
-
 from miniros.util.src.helpers import *
-import os, platform, subprocess
+import os, subprocess, sys
 import xml.dom.minidom as xml
-import shutil
+import xml.etree.ElementTree as ET
+import shutil, psutil, time, signal
+import importlib.resources, importlib.metadata
+import re
+from dataclasses import dataclass, field
+
+try:
+    VERSION = importlib.metadata.version("miniros")
+    BASIC_MAIN_FILE = (
+        importlib.resources.files("miniros")
+        .joinpath("demo/main.example.py")
+        .read_text()
+    )
+except Exception as e:
+    print(e)
+
+    VERSION = "[unknown]"
+    BASIC_MAIN_FILE = 'print("Hello, world")'
 
 
-def run_main():
+@dataclass
+class PackageInfo:
+    name: str
+    entrypoint: str
+    maintainer: str
+    description: str
+    version: str
+    authors: list[str] = field(default_factory=list)
+    pip_requirements: list[str] = field(default_factory=list)
+    miniros_requirements: list[str] = field(default_factory=list)
+
+
+def error(*args):
+    print(f"\033[0;31m[ERROR]", *args, "\033[0m\n")
+
+
+def info(*args):
+    print(f"\033[1;32m[INFO]", *args, "\033[0m")
+
+
+def warn(*args):
+    print(f"\033[1;33m[WARNING]", *args, "\033[0m")
+
+
+def create_xml_element(doc, tag, text=None, children=None):
+    element = xml.Element(tag)
+    element.ownerDocument = doc
+    if text is not None:
+        text_node = xml.Text()
+        text_node.replaceWholeText(str(text))
+        element.appendChild(text_node)
+    if children:
+        for child in children:
+            element.appendChild(child)
+    return element
+
+
+def parse_package_xml(xml_path: str) -> PackageInfo:
+    if not os.path.exists(xml_path):
+        error(f"xml file was not found in '{xml_path}'")
+        sys.exit(1)
+
+    tree = ET.parse(xml_path)
+    root = tree.getroot()
+
+    name = root.get("name")
+    version = root.get("version")
+
+    entrypoint = root.findtext("entrypoint")
+    maintainer = root.findtext("maintainer")
+    description = root.findtext("description")
+
+    authors = [
+        author.text.strip() for author in root.findall("authors/author") if author.text
+    ]
+
+    pip_reqs = [
+        pip.text.strip() for pip in root.findall("requirements/pip") if pip.text
+    ]
+    miniros_reqs = [
+        miniros.text.strip()
+        for miniros in root.findall("requirements/miniros")
+        if miniros.text
+    ]
+
+    if None in [name, entrypoint, maintainer, description]:
+        raise ValueError("invalid xml file")
+
+    return PackageInfo(
+        name,  # type: ignore
+        entrypoint,  # type: ignore
+        maintainer,  # type: ignore
+        description,  # type: ignore
+        version,  # type: ignore
+        authors,
+        pip_reqs,
+        miniros_reqs,
+    )
+
+
+def write_package_xml(xml_path: str, package_info: PackageInfo) -> None:
+    doc = xml.Document()
+    root = create_xml_element(doc, "package")
+    doc.appendChild(root)
+
+    root.setAttribute("name", package_info.name)
+    root.setAttribute("version", package_info.version)
+
+    root.appendChild(
+        create_xml_element(doc, "entrypoint", text=package_info.entrypoint)
+    )
+    root.appendChild(
+        create_xml_element(doc, "maintainer", text=package_info.maintainer)
+    )
+    root.appendChild(
+        create_xml_element(doc, "description", text=package_info.description)
+    )
+    authors_e = create_xml_element(doc, "authors")
+    for author in package_info.authors:
+        author_e = create_xml_element(doc, "author", text=author)
+        authors_e.appendChild(author_e)
+    root.appendChild(authors_e)
+
+    requirements_e = create_xml_element(doc, "requirements")
+    for pack_name in package_info.pip_requirements:
+        package = create_xml_element(doc, "pip", text=pack_name)
+        requirements_e.appendChild(package)
+
+    for pack_name in package_info.miniros_requirements or []:
+        package = create_xml_element(doc, "miniros", text=pack_name)
+        requirements_e.appendChild(package)
+
+    root.appendChild(requirements_e)
+
+    with open(xml_path, "w") as f:
+        f.write(doc.toprettyxml())
+
+
+def prepare_name(package: str) -> str:
+    if re.fullmatch(r"^[a-zA-Z][a-zA-Z0-9_-]{,30}[a-zA-Z0-9]$", package) is not None:
+        return package.replace("-", "_")
+
+    else:
+        error(f"package name '{package}' is invalid")
+        sys.exit(1)
+
+
+def get_pip_name(package: str) -> str:
+    return f"miniros_{prepare_name(package)}"
+
+
+def run_main() -> None:
     parser, parsed = parse_arguments()
 
-    PYTHON_EXEC = parsed.pyexec
+    def trace(*args):
+        if parsed.trace:
+            print("[TRACE]", *args)
+
+    PYTHON_EXEC = sys.executable
 
     if parsed.version:
         print()
@@ -23,87 +173,129 @@ def run_main():
         print()
         print("\033[0;36mby Vadimych1 (https://github.com/Vadimych1)\033[0m")
         print()
-        quit(0)
-
-    # TODO: check how it works on windows
-    # and made platform-independent solution
-    if parsed.venv is not None:
-        PYTHON_EXEC = os.path.join(parsed.venv, "bin/python3")
-
-    def trace(*args):
-        if parsed.trace:
-            print("[TRACE]", *args)
-
-    def error(*args):
-        print(f"\033[0;31m[ERROR]", *args)
+        sys.exit(0)
 
     trace("py executable", PYTHON_EXEC)
     trace("command", parsed.subparser_name)
 
     match parsed.subparser_name:
         case "run":
-            pkg = parsed.package
-            path = get_package_dir(pkg)
-
-            trace(pkg, path)
-
-            if not os.path.exists(path):
-                error(f"package '{pkg}' does not exist")
-                quit(1)
-
-            doc = xml.parse(os.path.join(path, "package.xml"))
-
-            pkg_name = doc.getElementsByTagName("name")[0].childNodes[0].nodeValue
-
-            if pkg != pkg_name:
-                error(f"package '{pkg}' has invalid XML implementation")
-                quit(1)
-
-            entrypoint = (
-                doc.getElementsByTagName("entrypoint")[0].childNodes[0].nodeValue
-            )
-
-            print(
-                f"\033[1;32m[MiniROS] Running package '{pkg}' with entrypoint {entrypoint}\033[0m\n"
-            )
+            name = prepare_name(parsed.package)
+            pip_name = get_pip_name(name)
 
             try:
-                subprocess.run(
-                    [
-                        PYTHON_EXEC,
-                        os.path.join(path, "src", entrypoint),
-                        *list(map("".join, parsed.args)),
-                    ],
-                    check=True,
-                    stdout=subprocess.DEVNULL if parsed.no_stdout else None,
-                    stderr=subprocess.DEVNULL if parsed.no_stderr else None,
-                )
+                trace("package v", importlib.metadata.version(pip_name))
+            except importlib.metadata.PackageNotFoundError:
+                error(f"package '{name}' does not exist")
+                sys.exit(1)
 
-            except Exception as e:
-                print(
-                    f"\n\033[1;31m[MiniROS] Package '{pkg}' exited with error {e}\033[0m"
-                )
-                quit(1)
+            package = parse_package_xml(
+                str(importlib.resources.files(pip_name).joinpath("package.xml"))
+            )
+            pkg_name = package.name
+            entrypoint = package.entrypoint
 
-            print(f"\n\033[1;32m[MiniROS] Package '{pkg}' exited successfully\033[0m")
-            quit(0)
+            if pkg_name != name:
+                error(f"package '{name}' has invalid xml file")
+                sys.exit(1)
+
+            info(f"running package '{name}' with entrypoint", entrypoint)
+
+            command = [PYTHON_EXEC, "-m", f"{pip_name}.{entrypoint}", *["".join(x) for x in parsed.args]]
+
+            stdout = subprocess.DEVNULL if parsed.no_stdout else None
+            stderr = subprocess.DEVNULL if parsed.no_stderr else None
+
+            proc = subprocess.Popen(command, stdout=stdout, stderr=stderr)
+            p = psutil.Process(proc.pid)
+            interrupted = False
+
+            try:
+                if parsed.log_stats is not None:
+                    p.cpu_percent(interval=None)
+                    time.sleep(0.1)
+
+                    with open(parsed.log_stats, "w") as f:
+                        f.write("idx\ttime\tcpu_perc\tmem_mb")
+                        i = 0
+
+                        while proc.poll() is None:
+                            i += 1
+
+                            try:
+                                ctime = time.time()
+
+                                cpu_perc = p.cpu_percent(interval=None)
+                                ram_usage_mb = p.memory_info().rss / (1024 * 1024)
+
+                                f.write(
+                                    f"\n{i}\t{ctime:<.2f}\t{cpu_perc:<.2f}\t{ram_usage_mb:<.2f}"
+                                )
+                                f.flush()
+
+                                time.sleep(0.5)
+
+                            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                                break
+
+                            except KeyboardInterrupt:
+                                interrupted = True
+                                break
+
+                else:
+                    while proc.poll() is None:
+                        time.sleep(0.1)
+
+            except KeyboardInterrupt:
+                interrupted = True
+
+            if interrupted:
+                if sys.platform != "win32":
+                    try:
+                        proc.send_signal(signal.SIGINT)
+                    except ProcessLookupError:
+                        pass
+
+                try:
+                    proc.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+
+            info(f"package '{name}' finished")
+            sys.exit(0)
 
         case "create":
+            if not parsed.skip:
+                choice = ask(
+                    "Package will be created in current working directory. Continue?",
+                    "yn",
+                    "y",
+                )
+                if choice == "n":
+                    sys.exit(1)
+
             pkg = parsed.name
-            pkg = pkg.replace("-", "_").replace(" ", "_")
-            maintainer = parsed.maintainer
-            description = parsed.description
-            authors = parsed.authors
-            requires = parsed.requires
-            entrypoint = parsed.entrypoint
-            otherexts = parsed.pypackages
+            pkg = prepare_name(pkg)
 
             trace("pkg", pkg)
-            trace("maintainer", maintainer)
-            trace("description", description)
-            trace("authors", authors)
-            trace("requires", requires)
-            trace("entrypoint", entrypoint)
+            trace("maintainer", parsed.maintainer)
+            trace("description", parsed.description)
+            trace("authors", parsed.authors)
+            trace("entrypoint", parsed.entrypoint)
+            trace("version", parsed.pack_ver)
+            trace("r_pip", parsed.requires_pip)
+            trace("r_miniros", parsed.requires_miniros)
+
+            package = PackageInfo(
+                pkg,
+                parsed.entrypoint,
+                parsed.maintainer,
+                parsed.description,
+                parsed.pack_ver,
+                parsed.authors or [],
+                parsed.requires_pip or [],
+                parsed.requires_miniros or [],
+            )
 
             folders = [
                 "src",
@@ -118,15 +310,17 @@ def run_main():
             ]
 
             if os.path.exists("package.xml"):
-                error(f"package '{pkg}' already exists in CWD")
-                quit(1)
+                error(f"package already exists in the current directory")
+                sys.exit(1)
 
             for fld in folders:
                 if os.path.exists(fld):
-                    print(
-                        f"Folder '{fld}', required for creating new package, already exists"
+                    r = ask(
+                        f"Folder '{fld}' already exists\n"
+                        "Overwrite it (ALL the files will be lost)?",
+                        "yns",
+                        "n",
                     )
-                    r = ask("Overwrite it (ALL files will be lost)?", "yns", "n")
                     match r:
                         case "y":
                             shutil.rmtree(fld)
@@ -134,7 +328,7 @@ def run_main():
                         case "s":
                             pass
                         case "n":
-                            quit(1)
+                            sys.exit(1)
 
                 else:
                     os.mkdir(fld)
@@ -143,121 +337,27 @@ def run_main():
                 if not os.path.exists(file):
                     open(file, "w").close()
 
+            with open("src/main.py", "w") as f:
+                f.write(BASIC_MAIN_FILE)
+
             with open("src/__init__.py", "w") as f:
-                f.write("""
-# Add your importables here
-from source.datatypes import *
-    """)
+                f.write(
+                    "# Add your importables here\n" "from .source.datatypes import *\n"
+                )
 
-            # some xml shit (sorry)
-            doc = xml.Document()
-            root = xml.Element("package")
-            root.ownerDocument = doc
-            doc.appendChild(root)
+            write_package_xml("package.xml", package)
 
-            name_e = xml.Element("name")
-            name_e.ownerDocument = doc
-            name_text = xml.Text()
-            name_text.replaceWholeText(pkg)
-            name_e.appendChild(name_text)
-            root.appendChild(name_e)
+            info(f"successfully created new package '{pkg}'")
 
-            entrypoint_e = xml.Element("entrypoint")
-            entrypoint_e.ownerDocument = doc
-            entrypoint_text = xml.Text()
-            entrypoint_text.replaceWholeText(entrypoint)
-            entrypoint_e.appendChild(entrypoint_text)
-            root.appendChild(entrypoint_e)
+            sys.exit(0)
 
-            requires_e = xml.Element("requires")
-            requires_e.ownerDocument = doc
-            for req in requires if requires is not None else []:
-                requirement_e = xml.Element("requirement")
-                requirement_e.ownerDocument = doc
-                requirement_text = xml.Text()
-                requirement_text.replaceWholeText("".join(req))
-                requirement_e.appendChild(requirement_text)
-                requires_e.appendChild(requirement_e)
-            root.appendChild(requires_e)
+        case "uninstall":
+            name = prepare_name(parsed.name)
 
-            maintainer_e = xml.Element("maintainer")
-            maintainer_e.ownerDocument = doc
-            maintainer_text = xml.Text()
-            maintainer_text.replaceWholeText(maintainer)
-            maintainer_e.appendChild(maintainer_text)
-            root.appendChild(maintainer_e)
-
-            description_e = xml.Element("description")
-            description_e.ownerDocument = doc
-            description_text = xml.Text()
-            description_text.replaceWholeText(description)
-            description_e.appendChild(description_text)
-            root.appendChild(description_e)
-
-            authors_e = xml.Element("authors")
-            authors_e.ownerDocument = doc
-            for author in authors if authors is not None else []:
-                author_e = xml.Element("author")
-                author_e.ownerDocument = doc
-                author_text = xml.Text()
-                author_text.replaceWholeText("".join(author))
-                author_e.appendChild(author_text)
-                authors_e.appendChild(author_e)
-            root.appendChild(authors_e)
-
-            otherexts_e = xml.Element("python-packages")
-            otherexts_e.ownerDocument = doc
-            for ext in otherexts if otherexts is not None else []:
-                ext_e = xml.Element("pp")
-                ext_e.ownerDocument = doc
-                ext_text = xml.Text()
-                ext_text.replaceWholeText("".join(ext))
-                ext_e.appendChild(ext_text)
-                otherexts_e.appendChild(ext_e)
-            root.appendChild(otherexts_e)
-
-            linux_scripts_e = xml.Element("linux-scripts")
-            linux_scripts_e.ownerDocument = doc
-
-            linux_script_e = xml.Element("lscript")
-            linux_scripts_e.ownerDocument = doc
-            linux_script_text = xml.Text()
-            linux_script_text.replaceWholeText("echo Done!")
-
-            linux_scripts_e.appendChild(linux_script_e)
-            root.appendChild(linux_scripts_e)
-
-            windows_scripts_e = xml.Element("windows-scripts")
-            windows_scripts_e.ownerDocument = doc
-
-            windows_script_e = xml.Element("wscript")
-            windows_scripts_e.ownerDocument = doc
-            windows_script_text = xml.Text()
-            windows_script_text.replaceWholeText("echo Done!")
-
-            windows_scripts_e.appendChild(windows_script_e)
-            root.appendChild(windows_scripts_e)
-
-            with open("package.xml", "w") as f:
-                f.write(doc.toprettyxml())
-
-            print(
-                f"\033[1;32m[MiniROS] Successfully created new package '{pkg}'\033[0m"
-            )
-
-            quit(0)
-
-        case "delete":
-            name = parsed.name
             trace(name)
 
             if ask(f"Do you want to delete package '{name}'", "yn", "n") == "n":
-                quit(0)
-
-            try:
-                shutil.rmtree(get_package_dir(name.replace("-", "_").replace(" ", "_")))
-            except OSError:
-                pass
+                sys.exit(0)
 
             subprocess.run(
                 [
@@ -265,144 +365,144 @@ from source.datatypes import *
                     "-m",
                     "pip",
                     "uninstall",
-                    f"miniros_{name.replace('-', '_').replace(' ', '_')}",
-                ]
+                    get_pip_name(name),
+                ],
+                stdout=subprocess.DEVNULL,
             )
 
-            quit(0)
+            info(f"successfully deleted package '{name}'")
+
+            sys.exit(0)
 
         case "install":
+            path = parsed.package_path
+
+            if path is not None:
+                if not os.path.exists(path):
+                    error(f"directory '{path}' was not found")
+
+                else:
+                    os.chdir(path)
+
             if not os.path.exists("package.xml"):
-                error("there is no package in current directory")
+                error("package.xml was not found")
 
-            doc = xml.parse("package.xml").getElementsByTagName("package")[0]
-            name = doc.getElementsByTagName("name")[0].childNodes[0].nodeValue
-            pname = name.replace("-", "_").replace(" ", "_")
-            pkg_dir = get_package_dir(pname)
+            package = parse_package_xml("package.xml")
+            name = prepare_name(package.name)
+            pip_packages = package.pip_requirements
 
-            otherexts = map(
-                lambda x: x.childNodes[0].nodeValue, doc.getElementsByTagName("pp")
-            )
+            pip_name = get_pip_name(name)
 
-            trace(name, pkg_dir)
-
-            if not os.path.exists(pkg_dir):
-                os.makedirs(pkg_dir)
+            trace("name", name)
+            trace("pip_packages", pip_packages)
 
             # build
             if os.path.exists("build"):
                 shutil.rmtree("build")
 
-            shutil.copytree("src", f"build/miniros_{pname}")
+            shutil.copytree("src", f"build/{pip_name}")
+            shutil.copy2("package.xml", f"build/{pip_name}/package.xml")
 
             if not os.path.exists("build/__init__.py"):
                 open("build/__init__.py", "w").close()
 
-            if not os.path.exists("setup.py"):
-                with open("build/setup.py", "w") as f:
-                    f.write(f"""from setuptools import setup
-setup(
-    name='miniros_{pname}',
-    version='{VERSION}',
-    description='miniros package',
-    license='MIT',
-    packages=['miniros_{pname}', 'miniros_{pname}.source'],
-    keywords=[],
-)
-    """)
-
-            else:
-                shutil.copy2("setup.py", "build/setup.py")
-
+            readme_name = None
             try:
                 found = False
                 for x in os.listdir():
                     if x.lower().startswith("readme.") and os.path.isfile(x):
                         shutil.copy2(x, f"build/{x}")
+                        readme_name = x
                         found = True
                         break
+
                 if not found:
                     raise Exception("-")
 
-            except Exception as e:
+            except Exception:
                 if not parsed.no_default_readme:
-                    print("\033[1;31mREADME file is not found (created default)\033[0m")
+                    warn("README file is not found (created default)")
 
+                    readme_name = "README.md"
                     with open("build/README.md", "w") as f:
-                        f.write(f"# Package {pname}")
+                        f.write(f"# Package {name}")
 
-            # copy to packages folder for 'miniros run'
-            shutil.rmtree(pkg_dir)
-            os.makedirs(pkg_dir)
-            shutil.copy2("package.xml", os.path.join(pkg_dir, "package.xml"))
-            shutil.copytree("src", os.path.join(pkg_dir, "src"))
+            if not os.path.exists("pyproject.toml"):
+                with open("build/pyproject.toml", "w") as f:
+                    f.write(
+                        "[build-system]\n"
+                        'requires = ["hatchling"]\n'
+                        'build-backend = "hatchling.build"\n'
+                        "\n"
+                        "[project]\n"
+                        f'name = "{pip_name}"\n'
+                        f'version = "{package.version}"\n'
+                        f'description = "{package.description}"\n'
+                        "authors = [\n"
+                        '    {name = "todo todo", email = "mail@example.com"}\n'  # TODO: generate this
+                        "]\n"
+                        'requires-python = ">=3.9"\n'
+                        f'readme = "{readme_name}"\n'
+                        "dependencies = [\n"
+                        f'   {",\n   ".join(f'"{req}"' for req in pip_packages)}'
+                        "]\n"
+                        "\n"
+                        "[tool.hatch.build.targets.wheel]\n"
+                        f'artifacts = ["{pip_name}/*.xml"]\n'
+                        f'packages = ["{pip_name}/"]'
+                    )
 
-            print("\033[0;34m[MiniROS] Compiling and installing package with pip")
+            else:
+                shutil.copy2("pyproject.toml", "build/pyproject.toml")
+
+            info("compiling and installing package with pip")
 
             os.chdir("build")
 
-            subprocess.run(
-                [PYTHON_EXEC, "./setup.py", "sdist"], stdout=subprocess.DEVNULL
-            )
             subprocess.run(
                 [
                     PYTHON_EXEC,
                     "-m",
                     "pip",
                     "install",
-                    f"dist/{os.listdir('dist')[0]}",
+                    ".",
                     "--force",
-                    # "--break-system-packages",
                 ],
                 stdout=subprocess.DEVNULL,
             )
             os.chdir("../../")
 
-            print("\033[0;34m[MiniROS] Installing specified Python packages")
-            for x in otherexts:
-                try:
-                    subprocess.run([PYTHON_EXEC, "-m", "pip", "install", x])
-                    print(f"\033[0;34m;Installed package {x}\033[0m")
-                except Exception as e:
-                    print(
-                        f"\033[1;31mFailed to install Python package {x}:", e, "\033[0m"
-                    )
+            info(f"successfully installed package '{name}'")
 
-            print("\033[0;34m[MiniROS] Running platform-specific scripts")
+            sys.exit(0)
 
-            sys = platform.system()
+        case "show":
+            name = prepare_name(parsed.package)
+            pip_name = get_pip_name(name)
 
-            def _get_val(x):
-                try:
-                    return x.childNodes[0].nodeValue
-                except Exception:
-                    return ""
+            try:
+                trace("package v", importlib.metadata.version(pip_name))
+            except importlib.metadata.PackageNotFoundError:
+                error(f"package '{name}' does not exist")
+                sys.exit(1)
 
-            if sys == "Windows":
-                scripts = map(_get_val, doc.getElementsByTagName("wscript"))
-
-            elif sys == "Linux":
-                scripts = map(_get_val, doc.getElementsByTagName("lscript"))
-
-            else:  # TODO: support other platforms
-                scripts = []
-
-            for x in scripts:
-                if len(x.strip()) == 0:
-                    continue
-
-                try:
-                    # TODO: write about this feature
-                    # in docs
-                    os.system(x.replace("%PYEXEC%", PYTHON_EXEC))
-                except OSError:
-                    print(f"\033[1;31m[MiniROS] Failed to run '{x}'\033[0m\n\n")
-
-            print(
-                f"\033[1;32m[MiniROS] Successfully installed package '{pname}'\033[0m\n\n"
+            package = parse_package_xml(
+                str(importlib.resources.files(pip_name).joinpath("package.xml"))
             )
 
-            quit(0)
+            info(f"Showing package {pip_name}")
+            print("-" * 15)
+            print(f"Name:", package.name)
+            print(f"Version:", package.version)
+            print(f"Maintainer:", package.maintainer)
+            print(f"Authors:", ", ".join(package.authors))
+            print(f"Description:", package.description)
+            print(f"Entrypoint:", package.entrypoint)
+            print(f"Python requirements:", ", ".join(package.pip_requirements))
+            print(f"MiniROS requirements:", ", ".join(package.miniros_requirements))
+            print("-" * 15)
+
+            sys.exit(0)
 
         case "server":
             from miniros.base.server import run
@@ -410,109 +510,19 @@ setup(
 
             host, port = parsed.host, parsed.port
 
-            trace(host, port)
+            trace("host", host)
+            trace("port", port)
 
-            print(f"\033[1m[MiniROS] Running at {host}:{port}\033[0m")
-
-            if len(parsed.superserver.strip()) > 0:
-                from miniros import AsyncROSClient
-                from miniros.base.server import AsyncDistributedServer
-                import json
-
-                trace(parsed.superserver)
-                with open(parsed.superserver, "r") as f:
-                    cfg = json.load(f)
-
-                    lip, lport = cfg["local_ip"], cfg["local_port"]
-                    rip, rport = cfg["remote_ip"], cfg["remote_port"]
-
-                    trace(lip, lport)
-                    trace(rip, rport)
-
-                    name = cfg["robot_name"]
-
-                    class OnRobotClient(AsyncROSClient): ...
-
-                    class OnServerClient(AsyncROSClient): ...
-
-                    robot_client = OnRobotClient(
-                        "l_" + name, _parse_handlers=False, ip=lip, port=lport
-                    )
-                    server_client = OnServerClient(
-                        "r_" + name, _parse_handlers=False, ip=rip, port=rport
-                    )
-
-                    for forwarder in cfg["on_server"]:
-
-                        def h():
-                            _forwarder = forwarder.copy()
-
-                            async def _forward(data):
-                                await server_client.wait(False)
-                                await server_client.anon(
-                                    _forwarder["to_node"],
-                                    _forwarder["to_field"],
-                                    data,
-                                    force_to_tcp=True,  # TODO: fix udp
-                                )
-
-                            robot_client.fields.append(
-                                (
-                                    _forwarder["from_node"],
-                                    _forwarder["from_field"],
-                                    _forward,
-                                )
-                            )
-
-                        h()
-
-                    for forwarder in cfg["on_robot"]:
-
-                        def h():
-                            _forwarder = forwarder.copy()
-
-                            async def _forward(data):
-                                await robot_client.wait(False)
-                                await robot_client.anon(
-                                    _forwarder["to_node"],
-                                    _forwarder["to_field"],
-                                    data,
-                                    force_to_tcp=True,  # TODO: fix udp
-                                )
-
-                            server_client.fields.append(
-                                (
-                                    _forwarder["from_node"],
-                                    _forwarder["from_field"],
-                                    _forward,
-                                )
-                            )
-
-                        h()
-
-                    s = AsyncDistributedServer(host, port)
-
-                    async def run_srv_client():
-                        await s.wait()
-                        await asyncio.gather(server_client.run(), server_client.wait())
-
-                    async def run_rbt_client():
-                        await s.wait()
-                        await asyncio.gather(robot_client.run(), robot_client.wait())
-
-                    async def main():
-                        await asyncio.gather(
-                            s.run(),
-                            run_srv_client(),
-                            run_rbt_client(),
-                        )
-
-                    asyncio.run(main())
-
-            else:
+            info(f"running at {host}:{port}")
+            
+            try:
                 asyncio.run(run(host, port))
 
-            quit(0)
+            except KeyboardInterrupt:
+                info("shutting down")
+                pass
+
+            sys.exit(0)
 
     parser.print_help()
 
