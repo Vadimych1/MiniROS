@@ -200,7 +200,12 @@ def run_main() -> None:
 
             info(f"running package '{name}' with entrypoint", entrypoint)
 
-            command = [PYTHON_EXEC, "-m", f"{pip_name}.{entrypoint}", *["".join(x) for x in parsed.args]]
+            command = [
+                PYTHON_EXEC,
+                "-m",
+                f"{pip_name}.{entrypoint}",
+                *["".join(x) for x in parsed.args],
+            ]
 
             stdout = subprocess.DEVNULL if parsed.no_stdout else None
             stderr = subprocess.DEVNULL if parsed.no_stderr else None
@@ -444,11 +449,14 @@ def run_main() -> None:
                         f'readme = "{readme_name}"\n'
                         "dependencies = [\n"
                         f'   {",\n   ".join(f'"{req}"' for req in pip_packages)}'
-                        "]\n"
-                        "\n"
-                        "[tool.hatch.build.targets.wheel]\n"
+                        '\n]\n'
+                        '\n'
+                        '[tool.hatch.build.targets.wheel]\n'
                         f'artifacts = ["{pip_name}/*.xml"]\n'
-                        f'packages = ["{pip_name}/"]'
+                        f'packages = ["{pip_name}/"]\n'
+                        '\n'
+                        '[tool.hatch.metadata]\n'
+                        'allow-direct-references = true\n' # used to install additional non-pip modules
                     )
 
             else:
@@ -513,7 +521,7 @@ def run_main() -> None:
             trace("port", port)
 
             info(f"running at {host}:{port}")
-            
+
             try:
                 asyncio.run(run(host, port))
 

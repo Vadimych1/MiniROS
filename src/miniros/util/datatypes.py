@@ -115,9 +115,14 @@ class NamedComposedValue:
 class NamedComposedDatatype(Datatype):
     def __init__(
         self,
-        fields: dict[str, Datatype],
+        fields: dict[str, type[Datatype] | "NamedComposedDatatype"],
         name: str | None = None,
     ):
+        lines = [name if name is not None else "Unnamed type"]
+        for field, typ in fields.items():
+            lines.append(f"@param {field}: {typ.__name__}")
+        self.__doc__ = "\n".join(lines)
+
         # sort keys so the order is always the same
         fields = list(fields.items())
         fields.sort(key=lambda x: x[0])
@@ -135,11 +140,11 @@ class NamedComposedDatatype(Datatype):
         self.name = name
         self.control_sum = sum(name.encode()) % 255 if name != None else 0
 
-    def new(self, **values: dict[str, Any]):
+    def new(self, **values: Any):
         return NamedComposedValue(values, self)
 
-    def __call__(self, **kwds):
-        return self.new(**kwds)
+    def __call__(self, **values: Any):
+        return self.new(**values)
 
     def encode(self, encode_data: NamedComposedValue) -> bytearray:
         values: dict[str, Any] = encode_data.values
@@ -371,6 +376,7 @@ class Vector(Datatype):
     def copy(self):
         return Vector(self.x, self.y, self.z)
 
+
 class Movement(Datatype):
     STATIC_SIZE = 4 * 6
 
@@ -469,7 +475,42 @@ class Dict(Datatype):
         return decoded
 
 
-LidarDatatype = NamedComposedDatatype(
-    {"distances": NumpyArray, "angles": NumpyArray, "pos": Vector},
-    "LidarDatatype",
+class Double(Datatype):
+    STATIC_SIZE = 8
+
+    @staticmethod
+    def encode(data: int):
+        return struct.pack(">d", data)
+
+    @staticmethod
+    def decode(data: bytearray):
+        return struct.unpack(">d", data)[0]
+
+
+# Composed datatypes
+Movement3DoF = NamedComposedDatatype(
+    {
+        "x": Float,
+        "y": Float,
+        "theta": Float,
+    },
+    "Movement3DoF",
+)
+
+TimedMovement3DoF = NamedComposedDatatype(
+    {
+        "movement": Movement3DoF,
+        "timestamp": Double,
+    },
+    "TimedMovement3DoF",
+)
+
+Lidar2D = NamedComposedDatatype(
+    {
+        "distances": NumpyArray,
+        "angles": NumpyArray,
+        "pos": Vector,
+        "timestamp": Double,
+    },
+    "Lidar2D",
 )
