@@ -120,7 +120,7 @@ class NamedComposedDatatype(Datatype):
     ):
         lines = [name if name is not None else "Unnamed type"]
         for field, typ in fields.items():
-            lines.append(f"@param {field}: {typ.__name__}")
+            lines.append(f"@param {field}: {typ}")
         self.__doc__ = "\n".join(lines)
 
         # sort keys so the order is always the same
