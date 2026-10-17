@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Any
 import numpy as np
 import cv2 as cv
@@ -115,12 +117,12 @@ class NamedComposedValue:
 class NamedComposedDatatype(Datatype):
     def __init__(
         self,
-        fields: dict[str, type[Datatype] | "NamedComposedDatatype"],
+        fields: dict[str, type[Datatype] | NamedComposedDatatype],
         name: str | None = None,
     ):
         lines = [name if name is not None else "Unnamed type"]
         for field, typ in fields.items():
-            lines.append(f"@param {field}: {typ.__name__}")
+            lines.append(f"@param {field}: {str(typ)}")
         self.__doc__ = "\n".join(lines)
 
         # sort keys so the order is always the same
@@ -132,7 +134,7 @@ class NamedComposedDatatype(Datatype):
         self._sizes = {k: v.STATIC_SIZE for k, v in fields.items()}
 
         if all(x != None for x in self._sizes.values()):
-            self.STATIC_SIZE = sum(self._sizes.values())
+            self.STATIC_SIZE = sum(self._sizes.values()) + 1 # +1 is CONTROL_SUM byte
 
         else:
             self.STATIC_SIZE = None
@@ -193,7 +195,7 @@ class NamedComposedDatatype(Datatype):
         return (
             f"NamedComposedDatatype<{self.name} ["
             + ", ".join(map(lambda x: x[0] + ": " + str(x[1]), self.fields.items()))
-            + "])"
+            + "]>"
         )
 
 
@@ -509,7 +511,6 @@ Lidar2D = NamedComposedDatatype(
     {
         "distances": NumpyArray,
         "angles": NumpyArray,
-        "pos": Vector,
         "timestamp": Double,
     },
     "Lidar2D",
