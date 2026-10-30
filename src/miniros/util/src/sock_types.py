@@ -53,7 +53,7 @@ class Status(Enum):
 class Field:
     __slots__ = ("name", "data", "subscribers")
 
-    def __init__(self, name: bytes, data: bytes, subscribers: list[str] | set[str]):
+    def __init__(self, name: bytes, data: bytes | None, subscribers: list[bytes] | set[bytes]):
         self.data = data
         self.subscribers = set(subscribers)
         self.name = name
@@ -72,8 +72,8 @@ class Connection:
         self,
         name: bytes,
         fields: dict[str, Field],
-        socket: "socket.socket",
-        udp_addr: AddrLike,
+        socket: socket.socket | None,
+        udp_addr: AddrLike | None,
     ):
         self.name = name
         self.fields = fields

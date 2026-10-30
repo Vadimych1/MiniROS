@@ -1,5 +1,6 @@
 from miniros.util.src.sock import AsyncDistributedClient as AsyncSockClient
 from miniros.util.datatypes import NamedComposedDatatype, Datatype
+from miniros.util.options import on_handlers_enabled
 from typing import Callable
 from typing import Any
 import logging
@@ -14,18 +15,18 @@ class AsyncTopic:
         self,
         field: str,
         encoder: NamedComposedDatatype | type[Datatype],
-        post_func: Callable[[str, bytearray], Any],
+        post_func: Callable[[str, bytes], Any],
     ):
         self.post_func = post_func
         self.field = field
         self.encoder = encoder
 
     async def post(self, data: Any) -> None:
-        await self.post_func(self.field, self.encoder.encode(data))
+        await self.post_func(self.field, bytes(self.encoder.encode(data)))
 
 
 class AsyncROSClient:
-    def __init__(self, name, ip="localhost", port=3000, _parse_handlers=True):
+    def __init__(self, name, ip="localhost", port=3000):
         self.name = name
         self.ip = ip
         self.port = port
@@ -37,9 +38,9 @@ class AsyncROSClient:
         self.fields = []
         self.client.anon_handlers = {}
 
-        if _parse_handlers:
+        if on_handlers_enabled():
             self._parse_handlers()
-
+    
     def _parse_handlers(self):
         for c in self.__class__.__dict__:
             if c.startswith("on_"):
@@ -51,16 +52,37 @@ class AsyncROSClient:
                 else:
                     field = data[0]
                     self.client.anon_handlers[field] = self.__getattribute__(c)
+    
+    def add_topic_handler(self, handler: Callable, node: str, field: str):
+        """
+        Adds a topic to subscribe list
+        """
+        
+        t = (node, field, handler)
+        if t in self.fields:
+            raise ValueError(f"topic handler '{node}:{field}' already registered")
+        
+        self.fields.append(t)
+    
+    def add_anon_handler(self, handler: Callable, field: str):
+        """
+        Adds anon handler to handler map
+        """
+        
+        if field in self.client.anon_handlers:
+            raise ValueError(f"anon handler '{field}' already registered")
+        
+        self.client.anon_handlers[field] = handler
 
     async def wait(self, sub_when_activated: bool = True):
         """
-        Wait for mainloop to start.
-
-        Can be used when running client mainloop and main code with asyncio.gather
+        Wait for mainloop to start
+        
+        When `sub_when_activated` is set to `True`: automatically subscribes to added topics (see `add_topic_handler`)
         """
 
         await self.client._is_running.wait()
-        await self.client._is_sended_credentials.wait()
+        await self.client._is_sent_credentials.wait()
 
         if sub_when_activated:
             await self.sub()
@@ -74,9 +96,17 @@ class AsyncROSClient:
             await self.client.subscribe(node, field, handler)
 
     async def run(self):
+        """
+        Run client mainloop
+        """
+        
         await self.client.mainloop()
 
     async def topic(self, field: str, datatype: NamedComposedDatatype | type[Datatype]):
+        """
+        Create topic and return topic scope for posting
+        """
+        
         await self.client.create_topic(field)
         return AsyncTopic(field, datatype, self.client.post)
 

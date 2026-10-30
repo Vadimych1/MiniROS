@@ -4,35 +4,54 @@ import asyncio, sys
 
 # this is basic setup for your MiniROS client class.
 # always override client's name when calling super().__init__()
+#
+# MiniROS has naming module (from miniros import naming), which
+# provides some descriptive names of Nodes and Topics you should use
 class SenderClient(AsyncROSClient):
-    def __init__(self, ip="localhost", port=3000, _parse_handlers=True):
-        super().__init__("sender", ip, port, _parse_handlers)
-
+    def __init__(self, ip="localhost", port=3000):
+        super().__init__("sender", ip, port)
 
 class ReceiverClient(AsyncROSClient):
-    def __init__(self, ip="localhost", port=3000, _parse_handlers=True):
-        super().__init__("receiver", ip, port, _parse_handlers)
+    def __init__(self, ip="localhost", port=3000):
+        super().__init__("receiver", ip, port)
+        
+        # subscribe to topics
+        # always do this in initializer or before calling client.wait(),
+        # otherwise MiniROS wont process these handlers
+        self.add_topic_handler(self.on_sender_data, "sender", "data")
+        self.add_anon_handler(self.counter_handler, "counter")
 
-    # MiniROS uses class functions to handle data
-    # naming is important: if you will name your
-    # function wrong, it will not receive any data
-    # - for topics: on_<node>_<topic>(self, data)
-    # - for anon messages: on_<anon_path>(self, data, sender)
-    # do not use any other underscores, things may break
+    # you can enable automatic topic and anon handler parsing using:
     #
-    # `aparsedata` is an asynchronous decorator for data
-    # handlers. it automatically converts `bytes` into
-    # readable datatype, like `str`, `int` or `numpy.ndarray`
-    # see more about datatypes at `MiniROS/docs/datatypes`
+    # ```
+    # import miniros.util.options as opts
+    # opts.enable_on_handlers()
+    # ```
     #
-    # this is a topic data handler
+    # then your topic and anon handler names SHOULD look like this:
+    # `async def on_{node}_{topic}(self, data)` - for topics
+    # `async def on_{anon_field}` - for anon handlers
+    # 
+    # note that this does not disable `add_topic_handler` and `add_anon_handler`
+    # adding handlers with them will work as well
+
+    # because we are adding handlers manually
+    # they can be named as we want
+    #
+    # recommended descriptive name guideline is
+    # `type-of-data_handler`, for example:
+    # - `odometry_handler`
+    # - `slam_pose_handler`
+    # - `rtc_change_handler`
+    
+    # this can used with `enable_on_handlers`
     @aparsedata(datatypes.String)
     async def on_sender_data(self, data: str):
         print(f"[topic] got data: {data}")
 
-    # and this is an anon data handler
+    # this will work too, but handler should be added manually
     @aparsedata(datatypes.Int)
-    async def on_counter(self, data: int, node: str):
+    async def counter_handler(self, data: int, node: str):
         print(f"[anon] got data from node {node}: {data}")
         
         # termination signal
@@ -43,7 +62,7 @@ class ReceiverClient(AsyncROSClient):
 
 # MiniROS uses asyncio API for fast and reliable data transferring
 # never run code that could block event loop in the same thread
-# as the MiniROS
+# as the MiniROS (use asyncio.to_thread or loop.run_in_executor for heavy work)
 async def run_sender():
     client = SenderClient()
 
@@ -63,11 +82,7 @@ async def run_sender():
             await data_topic.post(f"{i}. Hello, world!")
 
             if i % 3 == 0:
-                # send anon message. auto encoding is not implemented
-                # now, so you may need to encode manually
-                #
-                # set force_to_tcp=True if you are getting exceptions or
-                # encountering high data loss
+                # send anon message; encode it manually
                 await client.anon("receiver", "counter", datatypes.Int.encode(i))
             
             # add delay
@@ -78,10 +93,13 @@ async def run_sender():
         
         # graceful backend shutdown
         await client.stop()
+    
+    # always ensure that you are running background tasks using asyncio.create_task
+    # otherwise MiniROS receiver loop could be blocked
+    run_task = asyncio.create_task(run())
 
-    # this call makes asyncio run your code
-    # and MiniROS backend simultaneously
-    await asyncio.gather(client.run(), run())
+    # run code and MiniROS backend simultaneously
+    await asyncio.gather(client.run(), run_task)
 
 
 async def run_receiver():

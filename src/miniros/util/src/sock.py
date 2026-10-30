@@ -1,13 +1,13 @@
-import socket, struct
-import logging
-from typing import Callable
-import json
-import asyncio
-import random
-import traceback
-from .sock_types import *
-import lz4.frame
+from typing import Callable, Any
 from asyncio import Queue
+from .sock_types import *
+import socket, struct
+import traceback
+import lz4.frame
+import asyncio
+import logging
+import random
+import json
 
 
 # logging.basicConfig(level=logging.DEBUG)
@@ -26,11 +26,11 @@ class AsyncDistributedServer:
         self.port = port
         self.servers: dict[str, Connection] = {}
 
-        self.sock = None
+        self.sock: asyncio.Server | None = None
         self.running = asyncio.Event()
 
     async def run(self) -> None:
-        self.sock: asyncio.Server = await asyncio.start_server(
+        self.sock = await asyncio.start_server(
             self.tcp_handler, self.ip, self.port
         )
 
@@ -102,8 +102,8 @@ class AsyncDistributedServer:
 
     async def handler(
         self,
-        r: Callable[[], bytes],
-        w: Callable[[bytes, None], None],
+        r: Callable[[], asyncio._CoroutineLike[bytes]],
+        w: Callable[[bytes], asyncio._CoroutineLike[Any]],
         _, # reader
         writer: asyncio.StreamWriter,
     ) -> None:
@@ -157,8 +157,7 @@ class AsyncDistributedServer:
                     await self._error(w, Errortypes.METHOD_NOT_FOUND)
 
         except Exception as e:
-            logging.error(e)
-            logging.error(f"Line: {e.__traceback__.tb_lineno}")
+            logging.error("\n".join(traceback.format_exception(e)))
 
         finally:
             logging.debug(f"Cleaning: {CREDENTIALS}")
@@ -292,7 +291,7 @@ class AsyncDistributedServer:
                     len(raw_field_name),
                     *CREDENTIALS,
                     *raw_field_name,
-                    *self.servers[CREDENTIALS].fields[raw_field_name].data,
+                    *(self.servers[CREDENTIALS].fields[raw_field_name].data or b""),
                 ]
             ),
         )
@@ -348,19 +347,20 @@ class AsyncDistributedServer:
         ):  # data = raw_node_name
             return await self._error(w, Errortypes.INVALID_GET_UDP_CREDENTIALS, data)
 
-        ip, port = self.servers[data].udp_addr  # data = raw_node_name
+        ip, port = self.servers[data].udp_addr or (None, None)  # data = raw_node_name
 
-        await w(
-            bytes(
-                [
-                    Datatypes.SEND_UDP_AUTH.value,
-                    len(data),
-                    *data,
-                    *ip.encode(),
-                    *struct.pack(">H", port),
-                ]
+        if ip is not None and port is not None:
+            await w(
+                bytes(
+                    [
+                        Datatypes.SEND_UDP_AUTH.value,
+                        len(data),
+                        *data,
+                        *ip.encode(),
+                        *struct.pack(">H", port),
+                    ]
+                )
             )
-        )
 
     async def _handle_send_udp_auth(self, data, CREDENTIALS, w):
         ip = data[:-2].decode()
@@ -435,7 +435,7 @@ class AsyncDistributedClient:
         self.transport: asyncio.DatagramTransport | None = None
 
         self._is_running = asyncio.Event()
-        self._is_sended_credentials = asyncio.Event()
+        self._is_sent_credentials = asyncio.Event()
 
         self._tcp_request_queue: Queue[bytes] = Queue(100)
 
@@ -582,7 +582,7 @@ class AsyncDistributedClient:
                     bytes(
                         [
                             Datatypes.ANON.value,
-                            len(self.name),
+                            len(node),
                             len(field),
                             *node.encode(),
                             *field.encode(),
@@ -602,19 +602,16 @@ class AsyncDistributedClient:
             )
         )
 
-    # async def rosstat(self) -> None:
-    #     await self.send(
-    #         bytes(
-    #             [
-    #                 Datatypes.ROSSTAT.value,
-    #             ]
-    #         )
-    #     )
-
     async def _recv(self, length: int) -> bytes:
+        if self.r is None:
+            return b""
+        
         return await self.r.readexactly(length)
 
     async def _send(self, data) -> None:
+        if self.w is None:
+            raise RuntimeError("writer has not been initialized, but '_send' was called")
+        
         self.w.write(data)
         await self.w.drain()
 
@@ -631,20 +628,17 @@ class AsyncDistributedClient:
             return bytes([])
 
     async def send(self, data):
-        # data = zlib.compress(data)
         data = lz4.frame.compress(data)
 
         length = len(data)
         length = struct.pack(">I", length)
 
-        ## why?
-        # if data[0] == 0x01:
-        #     raise Exception("")
-
-        await self._send(length)
-        await self._send(data)
+        await self._send(length + data)
 
     async def send_udp(self, data: bytes, addr: AddrLike):
+        if self.transport is None:
+            raise RuntimeError("transport has not been initialized, but 'send_udp' was called")
+        
         self.transport.sendto(struct.pack(">I", len(data)) + data, addr)
 
     # TODO: add an Queue to properly handle situations when requests are sending too fast
@@ -680,19 +674,20 @@ class AsyncDistributedClient:
                             )
                         )
 
-                        ip, port = self.transport.get_extra_info("sockname")[:2]
+                        if self.transport is not None:
+                            ip, port = self.transport.get_extra_info("sockname")[:2]
 
-                        await self.send(
-                            bytes(
-                                [
-                                    Datatypes.SEND_UDP_AUTH.value,
-                                    *ip.encode(),
-                                    *struct.pack(">H", int(port)),
-                                ]
+                            await self.send(
+                                bytes(
+                                    [
+                                        Datatypes.SEND_UDP_AUTH.value,
+                                        *ip.encode(),
+                                        *struct.pack(">H", int(port)),
+                                    ]
+                                )
                             )
-                        )
 
-                        self._is_sended_credentials.set()
+                        self._is_sent_credentials.set()
 
                     case Datatypes.SEND_UDP_AUTH:
                         logging.debug("SEND_UDP_AUTH")
@@ -706,11 +701,7 @@ class AsyncDistributedClient:
                         ip = data[1 + node_name_len : -2].decode()
                         port = struct.unpack(">H", data[-2:])[0]
 
-                        self.udp_servers[node_name] = UDPConnection(
-                            ip,
-                            port,
-                            node_name,
-                        )
+                        self.udp_servers[node_name] = UDPConnection(ip, port, node_name)
                         self.udp_buffers[(ip, port)] = b""
 
                     case Datatypes.SEND_GET:
@@ -730,24 +721,37 @@ class AsyncDistributedClient:
                             self.received[node_name] = {}
 
                         self.received[node_name][field_name] = data[data_start:]
-                        if (
-                            node_name in self.handlers
-                            and field_name in self.handlers[node_name]
-                        ):
-                            result = await self.handlers[node_name][field_name](
-                                data[data_start:]
-                            )
-                            if result is not None:
-                                logging.debug(
-                                    f"[{self.name}] {node_name}:{field_name}: {result}"
-                                )
+                        if node_name in self.handlers and field_name in self.handlers[node_name]:
+                            # using asyncio.create_task instead of direct call 
+                            # with await does not block receiving loop
+                            asyncio.create_task(self.handlers[node_name][field_name](data[data_start:]))
+                        
+                        else:
+                            logging.warning(f"[{self.name}] post:{node_name}:{field_name}: handler not found")
+                    
+                    case Datatypes.SEND_ANON:
+                        logging.debug("SEND_ANON")
 
+                        name_length = data[0]
+                        field_length = data[1]
+
+                        data_start = 2 + name_length + field_length
+
+                        node_name = data[2 : 2 + name_length].decode()
+                        field_name = data[2 + name_length : 2 + name_length + field_length].decode()
+
+                        if field_name in self.anon_handlers:
+                            asyncio.create_task(self.anon_handlers[field_name](data[data_start:], node_name))
+                        
+                        else:
+                            logging.warning(f"[{self.name}] anon:{field_name}: handler not found")
+
+                            
                     case Datatypes.SEND_POST:
                         logging.debug("SEND_POST")
 
                     case Datatypes.ERROR:
-                        logging.debug("ERROR")
-                        logging.debug(data)
+                        logging.debug(f"ERROR : {data}")
 
                         match Errortypes(data[0]):
                             case Errortypes.NODE_EXISTS:
@@ -755,20 +759,20 @@ class AsyncDistributedClient:
                                 break
 
                             case Errortypes.INVALID_CREDENTIALS:
-                                logging.error("Sended invalid credentials")
+                                logging.error("Sent invalid credentials")
                                 break
 
                             case Errortypes.METHOD_NOT_FOUND:
                                 logging.error("Requested method not found")
 
                             case Errortypes.INVALID_SUBSCRIBE:
-                                logging.error("Sended invalid subscribe credentials")
+                                logging.error("Sent invalid subscribe credentials")
 
                             case Errortypes.INVALID_ANON_CREDENTIALS:
-                                logging.error("Sended invalid ANON credentials")
+                                logging.error("Sent invalid ANON credentials")
 
                             case Errortypes.INVALID_GET_UDP_CREDENTIALS:
-                                logging.error("Sended invalid GET_UDP credentials")
+                                logging.error("Sent invalid GET_UDP credentials")
 
                                 name = data[2:].decode()
 
@@ -783,32 +787,7 @@ class AsyncDistributedClient:
 
                             case _:
                                 logging.error("unknown error")
-
-                    case Datatypes.SEND_ANON:
-                        logging.debug("SEND_ANON")
-
-                        name_length = data[0]
-                        field_length = data[1]
-
-                        data_start = 2 + name_length + field_length
-
-                        node_name = data[2 : 2 + name_length].decode()
-                        field_name = data[
-                            2 + name_length : 2 + name_length + field_length
-                        ].decode()
-
-                        if field_name in self.anon_handlers:
-                            result = await self.anon_handlers[field_name](
-                                data[data_start:], node_name
-                            )
-                            if result is not None:
-                                logging.debug(
-                                    f"[{self.name}] anon:{field_name}: {result}"
-                                )
-
-                    case Datatypes.ROSSTAT:
-                        self.on_rosstat(json.loads(data.decode()))
-
+                                
                     case _:
                         raise Exception
 
@@ -836,10 +815,14 @@ class AsyncDistributedClient:
             await asyncio.sleep(0.01)
 
     async def _udp_mainloop_handler(self, data: bytes, addr: AddrLike) -> int:
+        if len(data) < 4:
+            return 0
+        
         length = struct.unpack(">I", data[:4])[0]
+        if len(data) < 4 + length:
+            return 0
 
         data = data[4 : 4 + length]
-
         datatype, data = data[0], data[1:]
 
         match DistributedDatatypes(datatype):

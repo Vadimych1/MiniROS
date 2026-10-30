@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from msgpack import packb, unpackb
+from warnings import deprecated
 from typing import Any
+from enum import Enum
 import numpy as np
 import cv2 as cv
-from enum import Enum
 import struct
-from msgpack import packb, unpackb
 import math
 import io
 
@@ -329,84 +330,7 @@ class Bytes(Datatype):
     def decode(data):
         return data
 
-
-class Vector(Datatype):
-    STATIC_SIZE = 4 * 3
-
-    def __init__(self, x: float, y: float, z: float):
-        super().__init__()
-
-        self.x = x
-        self.y = y
-        self.z = z
-
-    def __add__(self, other: "Vector") -> "Vector":
-        return Vector(self.x + other.x, self.y + other.y, self.z + other.z)
-
-    def __sub__(self, other: "Vector") -> "Vector":
-        return Vector(self.x - other.x, self.y - other.y, self.z - other.z)
-
-    def __mul__(self, other: "Vector") -> float:
-        return self.x * other.x + self.y * other.y + self.z * other.z
-
-    def __abs__(self):
-        return self.__mul__(self) ** 0.5
-
-    def __str__(self):
-        return f"Vector({self.x}, {self.y}, {self.z})"
-
-    def __iter__(self):
-        for x in self.x, self.y, self.z:
-            yield x
-
-    def __eq__(self, value):
-        return all(
-            math.isclose(x, y, rel_tol=1e-6, abs_tol=1e-9) for x, y in zip(value, self)
-        )
-
-    def norm(self) -> float:
-        return (self * self) ** 0.5
-
-    @staticmethod
-    def encode(data: "Vector") -> bytearray:
-        return struct.pack(">fff", data.x, data.y, data.z)
-
-    @staticmethod
-    def decode(data: bytearray) -> "Vector":
-        return Vector(*struct.unpack(">fff", data))
-
-    def copy(self):
-        return Vector(self.x, self.y, self.z)
-
-
-class Movement(Datatype):
-    STATIC_SIZE = 4 * 6
-
-    def __init__(self, pos: Vector, ang: Vector):
-        super().__init__()
-
-        self.pos = pos
-        self.ang = ang
-
-    def __add__(self, other: "Movement"):
-        return Movement(other.pos + self.pos, other.ang + self.ang)
-
-    def __sub__(self, other: "Movement"):
-        return Movement(self.pos - other.pos, self.ang - other.ang)
-
-    def __str__(self):
-        return f"Movement({self.pos}, {self.ang})"
-
-    @staticmethod
-    def encode(data: "Movement"):
-        return struct.pack(">ffffff", *data.pos, *data.ang)
-
-    @staticmethod
-    def decode(data: bytearray):
-        a, b, c, d, e, f = struct.unpack(">ffffff", data)
-        return Movement(Vector(a, b, c), Vector(d, e, f))
-
-
+@deprecated("Dict datatype may be slow in some cases. Use static datatypes or NamedComposedDatatype instead")
 class Dict(Datatype):
     STATIC_SIZE = None
 
@@ -418,9 +342,7 @@ class Dict(Datatype):
             int: (Int, 1),
             float: (Float, 2),
             bytes: (Bytes, 3),
-            bytearray: (Bytes, 3),
-            Vector: (Vector, 4),
-            Movement: (Movement, 5),
+            bytearray: (Bytes, 3)
         },
     ) -> bytearray:
         keys = list(data.keys())
@@ -449,9 +371,7 @@ class Dict(Datatype):
             0: String,
             1: Int,
             2: Float,
-            3: Bytes,
-            4: Vector,
-            5: Movement,
+            3: Bytes
         },
     ) -> dict[str, Any]:
         metadata_length = struct.unpack(">I", data[-4:])[0]
@@ -490,28 +410,147 @@ class Double(Datatype):
 
 
 # Composed datatypes
-Movement3DoF = NamedComposedDatatype(
-    {
-        "x": Float,
-        "y": Float,
-        "theta": Float,
-    },
-    "Movement3DoF",
-)
+## pose3
+Pose3DoF = NamedComposedDatatype({
+    "x": Float,
+    "y": Float,
+    "theta": Float,
+}, "Pose3DoF")
 
-TimedMovement3DoF = NamedComposedDatatype(
-    {
-        "movement": Movement3DoF,
-        "timestamp": Double,
-    },
-    "TimedMovement3DoF",
-)
+TimedPose3DoF = NamedComposedDatatype({
+    "x": Float,
+    "y": Float,
+    "theta": Float,
+    "timestamp": Double,
+}, "TimedPose3DoF")
 
-Lidar2D = NamedComposedDatatype(
-    {
-        "distances": NumpyArray,
-        "angles": NumpyArray,
-        "timestamp": Double,
-    },
-    "Lidar2D",
-)
+## pose6
+Pose6DoF = NamedComposedDatatype({
+    "x": Float,
+    "y": Float,
+    "z": Float,
+    "roll": Float,
+    "pitch": Float,
+    "yaw": Float,
+}, "Pose6DoF")
+
+TimedPose6DoF = NamedComposedDatatype({
+    "x": Float,
+    "y": Float,
+    "z": Float,
+    "roll": Float,
+    "pitch": Float,
+    "yaw": Float,
+    "timestamp": Double,
+}, "TimedPose6DoF")
+
+## lidar
+Lidar2D = NamedComposedDatatype({
+    "distances": NumpyArray,
+    "angles": NumpyArray,
+    "timestamp": Double,
+}, "Lidar2D")
+
+## slam
+OccupancyGrid = NamedComposedDatatype({
+    "grid": NumpyArray,
+    "width": Int,
+    "height": Int,
+    "offset_x_px": Int,
+    "offset_y_px": Int,
+    "resolution": Float,
+}, "SLAMOffsetMap")
+
+## goals
+Goal2D = NamedComposedDatatype({
+    "x": Float,
+    "y": Float,
+}, "Goal2D")
+
+Goal3D = NamedComposedDatatype({
+    "x": Float,
+    "y": Float,
+    "z": Float,
+}, "Goal3D")
+
+## cmdvel
+CmdVel3DoF = NamedComposedDatatype({
+    "tangent": Float,
+    "normal": Float,
+    "angular": Float,
+}, "CmdVel3DoF")
+
+CmdVel6DoF = NamedComposedDatatype({
+    "tangent": Float,
+    "normal": Float,
+    "binormal": Float,
+    "roll": Float,
+    "pitch": Float,
+    "yaw": Float,
+}, "CmdVel6DoF")
+
+TimedCmdVel3DoF = NamedComposedDatatype({
+    "tangent": Float,
+    "normal": Float,
+    "angular": Float,
+    "timestamp": Double,
+}, "CmdVel3DoF")
+
+TimedCmdVel6DoF = NamedComposedDatatype({
+    "tangent": Float,
+    "normal": Float,
+    "binormal": Float,
+    "roll": Float,
+    "pitch": Float,
+    "yaw": Float,
+    "timestamp": Double,
+}, "CmdVel6DoF")
+
+## odometry
+Odometry3DoF = NamedComposedDatatype({
+    "x": Float,
+    "y": Float,
+    "theta": Float,
+}, "Odometry3DoF")
+
+Odometry6DoF = NamedComposedDatatype({
+    "x": Float,
+    "y": Float,
+    "z": Float,
+    "roll": Float,
+    "pitch": Float,
+    "yaw": Float,
+}, "Odometry6DoF")
+
+TimedOdometry3DoF = NamedComposedDatatype({
+    "x": Float,
+    "y": Float,
+    "theta": Float,
+    "timestamp": Double,
+}, "TimedOdometry3DoF")
+
+TimedOdometry6DoF = NamedComposedDatatype({
+    "x": Float,
+    "y": Float,
+    "z": Float,
+    "roll": Float,
+    "pitch": Float,
+    "yaw": Float,
+    "timestamp": Double,
+}, "TimedOdometry6DoF")
+
+## odometry speeds
+OdometrySpeeds3DoF = NamedComposedDatatype({
+    "tangent": Float,
+    "normal": Float,
+    "angular": Float,
+}, "OdometrySpeeds3DoF")
+
+OdometrySpeeds6DoF = NamedComposedDatatype({
+    "tangent": Float,
+    "normal": Float,
+    "binormal": Float,
+    "roll": Float,
+    "pitch": Float,
+    "yaw": Float,
+}, "OdometrySpeeds6DoF")

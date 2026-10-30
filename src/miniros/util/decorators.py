@@ -1,10 +1,13 @@
+from .datatypes import NamedComposedDatatype
 import threading
 import logging
+
+
 
 _decorators_logger = logging.getLogger("decorators")
 
 
-def parsedata(datatype: type, arg: int = 1):
+def parsedata(datatype: type | NamedComposedDatatype, arg: int = 1):
     def wwrapper(func):
         def wrapper(*args, **kwargs):
             args = list(args)
@@ -23,7 +26,7 @@ def parsedata(datatype: type, arg: int = 1):
     return wwrapper
 
 
-def aparsedata(datatype: type, arg: int = 1):
+def aparsedata(datatype: type | NamedComposedDatatype, arg: int = 1):
     def wwrapper(func):
         async def wrapper(*args, **kwargs):
             args = list(args)
@@ -40,7 +43,6 @@ def aparsedata(datatype: type, arg: int = 1):
         return wrapper
 
     return wwrapper
-
 
 # TODO: add exception capturing logic inside thread
 def threaded(daemon=True):
