@@ -47,7 +47,6 @@ class Datatype:
 
         raise NotImplementedError
 
-
 class EnumDatatype:
     STATIC_SIZE = 1
 
@@ -67,6 +66,9 @@ class NamedComposedValue:
         super().__setattr__("_values", values)
         super().__setattr__("_names", list(parent.fields.keys()))
         super().__setattr__("_parent", parent)
+        
+        super().__setattr__("_changed", True)
+        super().__setattr__("_cached", None)
 
     def __getattr__(self, name):
         if name == "values":
@@ -77,6 +79,12 @@ class NamedComposedValue:
 
         elif name == "names":
             return super().__getattribute__("_names")
+        
+        elif name == "cached":
+            return super().__getattribute__("_cached")
+        
+        elif name == "changed":
+            return super().__getattribute__("_changed")
 
         if name in self.names:
             if name in self.values:
@@ -90,6 +98,10 @@ class NamedComposedValue:
                 f"NamedComposedValue of <NamedComposedDatatype {self.parent.name}> has no attribute '{name}'"
             )
 
+    def _set_cache(self, cache):
+        super().__setattr__("_changed", False)
+        super().__setattr__("_cached", cache)
+
     def __setattr__(self, name, value):
         v = self.values
         n = super().__getattribute__("_names")
@@ -100,6 +112,8 @@ class NamedComposedValue:
             raise AttributeError(
                 f"NamedComposedValue of <NamedComposedDatatype {self.parent.name}> has no attribute '{name}'"
             )
+        
+        super().__setattr__("_changed", True)
 
     def __str__(self):
         vals = self.values
@@ -150,6 +164,9 @@ class NamedComposedDatatype(Datatype):
         return self.new(**values)
 
     def encode(self, encode_data: NamedComposedValue) -> bytearray:
+        if not encode_data.changed:
+            return encode_data.cache
+        
         values: dict[str, Any] = encode_data.values
         data = bytearray([self.control_sum])
 
@@ -165,6 +182,8 @@ class NamedComposedDatatype(Datatype):
 
             else:
                 data += enc
+
+        encode_data._set_cache(data)
 
         return data
 
@@ -190,7 +209,10 @@ class NamedComposedDatatype(Datatype):
                 values[k] = v.decode(data[i : i + ssize])
                 i += ssize
 
-        return NamedComposedValue(values, self)
+        decoded = NamedComposedValue(values, self)
+        decoded._set_cache(data)
+        
+        return decoded
 
     def __str__(self):
         return (
