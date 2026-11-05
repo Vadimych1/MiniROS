@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 from msgpack import packb, unpackb
-from warnings import deprecated
 from typing import Any
 from enum import Enum
 import numpy as np
 import cv2 as cv
 import struct
-import math
 import io
 
 
@@ -16,7 +14,6 @@ class Datatype:
     Base interface for encoding and decoding data
     """
 
-    CODE = 0x00  # TODO: check if this line still used, remove if not
     STATIC_SIZE = None  # int | None; represents number of bytes used to pack message if it is constant
 
     @staticmethod
@@ -252,16 +249,10 @@ class AnyArray(Datatype):
 OpenCV_IMDECODE = int
 
 
-class OpenCVImageType(Enum):
-    RGB = 0x00
-    GRAYSCALE = 0x01
-    BGR = 0x02
-
-
 _img_type_to_cv = {
-    OpenCVImageType.RGB: cv.IMREAD_COLOR,
-    OpenCVImageType.GRAYSCALE: cv.IMREAD_GRAYSCALE,
-    OpenCVImageType.BGR: cv.IMREAD_COLOR,
+    0x00: cv.IMREAD_COLOR,
+    0x01: cv.IMREAD_GRAYSCALE,
+    0x02: cv.IMREAD_COLOR,
 }
 
 
@@ -271,14 +262,14 @@ class OpenCVImage(NumpyArray):
 
     @staticmethod
     def decode(data: bytearray) -> "cv.Mat":
-        datatype = OpenCVImageType(data[0])
+        datatype = _img_type_to_cv[data[0]]
         arr = NumpyArray.decode(data[1:])
-        return cv.imdecode(arr, _img_type_to_cv[datatype])
+        return cv.imdecode(arr, datatype)
 
     @staticmethod
-    def encode(image: "cv.Mat", datatype: OpenCVImageType) -> bytearray:
+    def encode(image: "cv.Mat", datatype: int) -> bytearray:
         arr = cv.imencode(".jpg", image)[1]
-        return bytearray([datatype.value]) + NumpyArray.encode(arr)
+        return bytearray([datatype]) + NumpyArray.encode(arr)
 
 
 class String(Datatype):
@@ -351,73 +342,6 @@ class Bytes(Datatype):
     @staticmethod
     def decode(data):
         return data
-
-@deprecated("Dict datatype may be slow in some cases. Use static datatypes or NamedComposedDatatype instead")
-class Dict(Datatype):
-    STATIC_SIZE = None
-
-    @staticmethod
-    def encode(
-        data: dict[str, Any],
-        encoders: dict[type, tuple[Datatype, int]] = {
-            str: (String, 0),
-            int: (Int, 1),
-            float: (Float, 2),
-            bytes: (Bytes, 3),
-            bytearray: (Bytes, 3)
-        },
-    ) -> bytearray:
-        keys = list(data.keys())
-
-        metadata = b"\x00".join(map(str.encode, keys))
-        metadata_length = struct.pack(">I", len(metadata))
-        metadata += metadata_length
-
-        encoded = b""
-        for key in keys:
-            if type(data[key]) in encoders:
-                e, ind = encoders[type(data[key])]
-                e = e.encode(data[key])
-
-                l = struct.pack(">I", len(e))
-                encoded += l + bytearray([ind]) + e
-            else:
-                raise TypeError(f"encoder for type '{type(data[key])}' is not found")
-
-        return encoded + metadata
-
-    @staticmethod
-    def decode(
-        data: bytearray,
-        decoders: dict[int, Datatype] = {
-            0: String,
-            1: Int,
-            2: Float,
-            3: Bytes
-        },
-    ) -> dict[str, Any]:
-        metadata_length = struct.unpack(">I", data[-4:])[0]
-        metadata = data[-4 - metadata_length : -4]
-
-        keys = list(map(bytes.decode, metadata.split(b"\x00")))
-
-        i = 0
-        decoded = {}
-        while len(data[: -4 - metadata_length]) > 0:
-            length = struct.unpack(">I", data[:4])[0]
-            ind = data[4]
-            key = data[5 : 5 + length]
-
-            if ind not in decoders:
-                raise TypeError(f"decoder for type '{ind}' is not found")
-
-            decoded[keys[i]] = decoders[ind].decode(key)
-
-            i += 1
-            data = data[5 + length :]
-
-        return decoded
-
 
 class Double(Datatype):
     STATIC_SIZE = 8
