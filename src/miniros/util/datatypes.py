@@ -168,7 +168,7 @@ class NamedComposedDatatype(Datatype):
 
     def encode(self, encode_data: NamedComposedValue) -> bytearray:
         if not encode_data.changed:
-            return encode_data.cache
+            return encode_data.cached
         
         values: dict[str, Any] = encode_data.values
         data = bytearray([self.control_sum])
