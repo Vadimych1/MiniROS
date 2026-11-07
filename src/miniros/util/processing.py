@@ -31,7 +31,7 @@ class PipeProtocol:
             t = type(data)
         
         try:
-            if isinstance(t, NamedComposedValue):
+            if isinstance(data, NamedComposedValue):
                 idx = self._dt.index(data.parent)
 
             elif t is NamedComposedDatatype or issubclass(t, Datatype):

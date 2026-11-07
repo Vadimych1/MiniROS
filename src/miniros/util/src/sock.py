@@ -102,8 +102,8 @@ class AsyncDistributedServer:
 
     async def handler(
         self,
-        r: Callable[[], asyncio._CoroutineLike[bytes]],
-        w: Callable[[bytes], asyncio._CoroutineLike[Any]],
+        r,
+        w,
         _, # reader
         writer: asyncio.StreamWriter,
     ) -> None:

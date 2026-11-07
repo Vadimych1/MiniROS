@@ -160,6 +160,12 @@ class NamedComposedDatatype(Datatype):
     def __call__(self, **values: Any):
         return self.new(**values)
 
+    def __eq__(self, value: object) -> bool:
+        if type(value) is NamedComposedDatatype:
+            return self.name == value.name and self.fields == value.fields
+        
+        return False
+
     def encode(self, encode_data: NamedComposedValue) -> bytearray:
         if not encode_data.changed:
             return encode_data.cache
