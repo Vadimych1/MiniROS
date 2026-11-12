@@ -1,47 +1,36 @@
 # MiniROS
-**Simple ROS-like tool powered by Python**
+**Simple ROS-like communication system powered by Python**
 
 ## Installation
-Run these commands in your terminal to install MiniROS:
-- **with venv (recommended)**:
+MiniROS requires python>=3.10
 ```bash
 python -m venv venv
+source venv/bin/activate
 git clone https://github.com/Vadimych1/MiniROS
-venv/bin/pip install ./MiniROS # or venv/Scripts/pip on Windows
-```
-Do not forget to activate your venv before using MiniROS
-
-- **without venv**:
-```bash
-git clone https://github.com/Vadimych1/MiniROS
-cd MiniROS
-pip install .
-cd ..
+pip install ./MiniROS # or venv/Scripts/pip on Windows
 ```
 
-## How to create and install package
-1. Create a new directory and `cd` to it; use only Latin letters, numbers, dashes, and underscores
-2. Run `miniros create <package_name>`. You can specify package metadata (see `miniros create -h`) or edit it directly after creation (see `package.xml`)
-3. Your package is created in current directory
+## Creating package
+Package creation is simple:
+1. make a new directory and `cd` there;
+2. run `miniros create <package_name> [args]`
 
-Project structure:
-```
-/- <package_name>
-/#/- build - build files
-/#/- src - source files
-/#/#/- source - source files
-/#/#/#/- datatypes.py - write your datatypes here
-/#/#/- main.py - default entrypoint
-/#/- package.xml - project metadata
-```
+Type `miniros create -h` to see what arguments does package creation support
 
-MiniROS will write example code into `main.py` for you
-You can change package name, version, entrypoint and other things by editing `package.xml`
+This will create a basic MiniROS package with default file contents, including `package.xml` and `main.py`
 
 ## How to install package:
-Run `miniros install path/to/package_root` or just `miniros install` if running in package directory
+Installing package:
+1. from specified directory: `miniros install <path/to/package>`
+2. from current directory: `miniros install`
+
+When installing, MiniROS will copy project files into `build` dir, add Python-package related files, then compile and install wheel
+
+You can replace MiniROS default `pyproject.toml` generation by putting it into the package root
+
+You can also put your `README.md` here, it will be included into the Python package installation 
 
 ## How to run package:
-Run `miniros run <package_name>`
+Type `miniros run <package_name>`. This will run entrypoint (default `main.py`) of specified package
 
-**See how does MiniROS work at [docs](docs/Overview.md)**
+**See more about MiniROS at [docs](docs/Overview.md)**
