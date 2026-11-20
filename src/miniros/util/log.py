@@ -3,7 +3,7 @@ import datetime
 
 _loggers = {}
 
-def get_logger(name: str, level: logging._Level = logging.INFO) -> logging.Logger:
+def get_logger(name: str, level = logging.INFO) -> logging.Logger:
     if type(name) is not str:
         raise ValueError('name must be of type str')
     
@@ -12,6 +12,8 @@ def get_logger(name: str, level: logging._Level = logging.INFO) -> logging.Logge
     
     else:
         l = logging.getLogger(name)
+        l.handlers.clear()
+        
         l.setLevel(logging.DEBUG)
         
         formatter = logging.Formatter(
