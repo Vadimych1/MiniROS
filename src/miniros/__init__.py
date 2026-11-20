@@ -3,6 +3,7 @@ from miniros.util.decorators import parsedata, aparsedata, threaded
 from miniros.base.client import AsyncTopic, AsyncROSClient
 from miniros.util.processing import PipeProtocol, MinirosPipe, ProcessPipe, NoneDatatype
 from miniros.util.util import LatestQueue
+from miniros.util.log import get_logger
 
 import miniros.util.naming as naming
 import miniros.util.datatypes as datatypes
@@ -13,5 +14,6 @@ __all__ = [
     "parsedata", "aparsedata", "threaded",
     "datatypes", "naming",
     "PipeProtocol", "MinirosPipe", "ProcessPipe", "NoneDatatype",
-    "LatestQueue"
+    "LatestQueue",
+    "get_logger"
 ]

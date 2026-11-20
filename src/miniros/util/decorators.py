@@ -1,10 +1,8 @@
 from .datatypes import NamedComposedDatatype
+from .log import get_logger
 import threading
-import logging
 
-
-
-_decorators_logger = logging.getLogger("decorators")
+_l = get_logger("decorators")
 
 
 def parsedata(datatype: type | NamedComposedDatatype, arg: int = 1):
@@ -16,7 +14,7 @@ def parsedata(datatype: type | NamedComposedDatatype, arg: int = 1):
                 args[arg] = datatype.decode(args[arg])
 
             except Exception as e:
-                _decorators_logger.debug(f"failed to parse to '{datatype}': {e}")
+                _l.warning(f"parsedata: failed to parse to '{datatype}': {e}")
                 return None
 
             return func(*args, **kwargs)
@@ -35,7 +33,7 @@ def aparsedata(datatype: type | NamedComposedDatatype, arg: int = 1):
                 args[arg] = datatype.decode(args[arg])
 
             except Exception as e:
-                _decorators_logger.debug(f"failed to parse to '{datatype}': {e}")
+                _l.warning(f"aparsedata: failed to parse to '{datatype}': {e}")
                 return None
 
             return await func(*args, **kwargs)
@@ -43,6 +41,7 @@ def aparsedata(datatype: type | NamedComposedDatatype, arg: int = 1):
         return wrapper
 
     return wwrapper
+
 
 # TODO: add exception capturing logic inside thread
 def threaded(daemon=True):

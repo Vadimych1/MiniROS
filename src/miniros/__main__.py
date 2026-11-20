@@ -198,8 +198,6 @@ def run_main() -> None:
                 error(f"package '{name}' has invalid xml file")
                 sys.exit(1)
 
-            info(f"running package '{name}' with entrypoint", entrypoint)
-
             command = [
                 PYTHON_EXEC,
                 "-m",
@@ -265,7 +263,6 @@ def run_main() -> None:
                 except subprocess.TimeoutExpired:
                     proc.kill()
 
-            info(f"package '{name}' finished")
             sys.exit(0)
 
         case "create":
