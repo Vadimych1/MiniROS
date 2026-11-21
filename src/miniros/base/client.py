@@ -3,12 +3,6 @@ from miniros.util.datatypes import NamedComposedDatatype, Datatype
 from miniros.util.options import on_handlers_enabled
 from typing import Callable
 from typing import Any
-import logging
-
-logging.basicConfig(
-    level=logging.WARNING, format="%(asctime)s [%(levelname)s] > %(message)s"
-)
-
 
 class AsyncTopic:
     def __init__(
